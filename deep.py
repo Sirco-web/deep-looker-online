@@ -9,10 +9,57 @@ import re
 import json
 import hashlib
 import secrets
+import shutil
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, make_response, send_from_directory
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import ipaddress
+
+def check_and_install_tools():
+    """Check for required tools and install if missing (for dev environments)"""
+    tools_needed = []
+    
+    if not shutil.which('ping'):
+        tools_needed.append('iputils-ping')
+    if not shutil.which('traceroute'):
+        tools_needed.append('traceroute')
+    
+    if tools_needed:
+        print(f"⚠️  Missing tools: {', '.join(tools_needed)}")
+        print("   Attempting to install...")
+        try:
+            # Try with sudo first (common in dev environments)
+            subprocess.run(
+                ['sudo', 'apt-get', 'update', '-qq'],
+                capture_output=True,
+                timeout=60
+            )
+            subprocess.run(
+                ['sudo', 'apt-get', 'install', '-y', '-qq'] + tools_needed,
+                capture_output=True,
+                timeout=120
+            )
+            print(f"   ✓ Installed: {', '.join(tools_needed)}")
+        except:
+            try:
+                # Try without sudo
+                subprocess.run(
+                    ['apt-get', 'update', '-qq'],
+                    capture_output=True,
+                    timeout=60
+                )
+                subprocess.run(
+                    ['apt-get', 'install', '-y', '-qq'] + tools_needed,
+                    capture_output=True,
+                    timeout=120
+                )
+                print(f"   ✓ Installed: {', '.join(tools_needed)}")
+            except Exception as e:
+                print(f"   ✗ Could not install tools: {e}")
+                print("   Note: Ping/traceroute will use TCP fallback methods")
+
+# Check tools on startup
+check_and_install_tools()
 
 app = Flask(__name__)
 
@@ -152,27 +199,57 @@ class DeepScanner:
                 raise Exception(f"Could not resolve: {self.target}")
 
     def check_alive(self):
-        """Ping host to check if alive"""
+        """Check if host is alive and measure latency using TCP connect"""
         if not self.config.get('check_alive', True):
             self.alive = True
+            self.latency = None
             return
         
+        if not self.ip_address:
+            self.alive = False
+            self.latency = None
+            return
+        
+        # Use TCP connect as primary method (works when ICMP is blocked)
+        self.alive = False
+        self.latency = None
+        
+        for test_port in [80, 443, 53, 22, 21, 25, 8080]:
+            try:
+                start = time.time()
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(2)
+                result = sock.connect_ex((self.ip_address, test_port))
+                elapsed = time.time() - start
+                sock.close()
+                
+                if result == 0:
+                    latency_ms = round(elapsed * 1000, 1)
+                    self.alive = True
+                    self.latency = f"{latency_ms}ms"
+                    return
+            except:
+                pass
+        
+        # Fallback: try ICMP ping if TCP failed
         try:
-            if not self.ip_address:
-                self.alive = False
-                return
             param = '-n' if os.name == 'nt' else '-c'
-            start = time.time()
             result = subprocess.run(
-                ['ping', param, '2', self.ip_address],
+                ['ping', param, '1', '-W', '2', self.ip_address],
                 capture_output=True,
                 text=True,
                 timeout=5
             )
-            self.latency = round((time.time() - start) * 1000, 2)
-            self.alive = result.returncode == 0
-        except: 
-            self.alive = False
+            
+            if result.returncode == 0:
+                self.alive = True
+                # Parse actual RTT from ping output
+                output = result.stdout
+                match = re.search(r'time[=<](\d+\.?\d*)\s*ms', output, re.IGNORECASE)
+                if match:
+                    self.latency = f"{match.group(1)}ms"
+        except:
+            pass
 
     def scan_tcp_port(self, port):
         """Scan single TCP port - optimized for speed"""
