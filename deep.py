@@ -7,812 +7,71 @@ import struct
 import random
 import re
 import json
+import hashlib
+import secrets
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, make_response, send_from_directory
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import ipaddress
 
 app = Flask(__name__)
 
-# Embedded HTML template
-HTML_TEMPLATE = """
-<! DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deep Network Scanner</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family:  -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-            background:  #f5f7fa;
-            color: #2c3e50;
-            line-height: 1.6;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 2rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-
-        .header h1 {
-            font-size: 2rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-
-        .header p {
-            opacity: 0.9;
-            font-size: 1.1rem;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        . scan-panel {
-            background: white;
-            border-radius: 8px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-
-        .input-row {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .input-group {
-            flex: 1;
-            min-width: 250px;
-        }
-
-        . input-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: #555;
-        }
-
-        input[type="text"], select {
-            width: 100%;
-            padding: 0.75rem;
-            border: 2px solid #e0e0e0;
-            border-radius:  6px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
-        }
-
-        input[type="text"]:focus, select: focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .scan-options {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        . checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-        }
-
-        .checkbox-group label {
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .btn {
-            padding: 0.875rem 2rem;
-            font-size: 1rem;
-            font-weight: 600;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .progress-section {
-            background: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            display: none;
-        }
-
-        .progress-section.active {
-            display: block;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height:  8px;
-            background: #e0e0e0;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 1rem;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            width: 0%;
-            transition:  width 0.3s;
-        }
-
-        .results-section {
-            display: none;
-        }
-
-        .results-section. active {
-            display: block;
-        }
-
-        .results-header {
-            background: white;
-            border-radius: 8px;
-            padding: 2rem;
-            margin-bottom:  2rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-
-        .results-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-top: 1.5rem;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            padding: 1.5rem;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .stat-card. success {
-            background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
-        }
-
-        .stat-card.warning {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            color: #555;
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #2c3e50;
-        }
-
-        .os-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: #667eea;
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            margin-top: 0.5rem;
-        }
-
-        .table-container {
-            background: white;
-            border-radius: 8px;
-            padding: 2rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            overflow-x: auto;
-        }
-
-        .table-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .table-title {
-            font-size: 1.5rem;
-            font-weight:  600;
-            color: #2c3e50;
-        }
-
-        .filter-group {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-
-        .filter-group select {
-            padding: 0.5rem;
-            border: 2px solid #e0e0e0;
-            border-radius: 6px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        thead {
-            background: #f8f9fa;
-        }
-
-        th {
-            padding: 1rem;
-            text-align:  left;
-            font-weight:  600;
-            color: #555;
-            border-bottom: 2px solid #e0e0e0;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        th:hover {
-            background: #e9ecef;
-        }
-
-        td {
-            padding: 1rem;
-            border-bottom: 1px solid #f0f0f0;
-        }
-
-        tbody tr:hover {
-            background:  #f8f9fa;
-        }
-
-        .port-badge {
-            background: #667eea;
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 4px;
-            font-weight: 600;
-            display: inline-block;
-        }
-
-        .protocol-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 4px;
-            font-weight: 600;
-            font-size: 0.85rem;
-        }
-
-        .protocol-tcp {
-            background: #e3f2fd;
-            color:  #1976d2;
-        }
-
-        .protocol-udp {
-            background: #f3e5f5;
-            color: #7b1fa2;
-        }
-
-        .state-open {
-            color: #2e7d32;
-            font-weight: 600;
-        }
-
-        .state-closed {
-            color: #c62828;
-            font-weight: 600;
-        }
-
-        .state-filtered {
-            color: #f57c00;
-            font-weight: 600;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: #999;
-        }
-
-        .empty-state-icon {
-            font-size:  4rem;
-            margin-bottom:  1rem;
-        }
-
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            width:  20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .scan-params {
-            background: #f8f9fa;
-            padding: 1.5rem;
-            border-radius: 8px;
-            margin-top: 2rem;
-        }
-
-        . scan-params h3 {
-            margin-bottom: 1rem;
-            color: #2c3e50;
-        }
-
-        .param-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-        }
-
-        .param-item {
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .param-label {
-            color: #666;
-        }
-
-        .param-value {
-            font-weight: 600;
-            color: #2c3e50;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            .input-row {
-                flex-direction: column;
-            }
-
-            .results-grid {
-                grid-template-columns: 1fr;
-            }
-
-            table {
-                font-size: 0.9rem;
-            }
-
-            th, td {
-                padding: 0.75rem 0.5rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <div class="container">
-            <h1>🔍 Deep Network Scanner</h1>
-            <p>Comprehensive TCP & UDP port scanning with service detection and OS fingerprinting</p>
-        </div>
-    </div>
-
-    <div class="container">
-        <div class="scan-panel">
-            <div class="input-row">
-                <div class="input-group">
-                    <label for="targetInput">Target Host</label>
-                    <input type="text" id="targetInput" placeholder="IP address or hostname (e.g., 192.168.1.1)">
-                </div>
-                <div class="input-group">
-                    <label for="portRange">Port Range</label>
-                    <select id="portRange">
-                        <option value="top100">Top 100 Ports (Fast)</option>
-                        <option value="top1000">Top 1000 Ports</option>
-                        <option value="all">All Ports 1-65535 (Slow)</option>
-                        <option value="custom">Custom Range</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="input-row" id="customPortRow" style="display: none;">
-                <div class="input-group">
-                    <label for="startPort">Start Port</label>
-                    <input type="text" id="startPort" placeholder="1" value="1">
-                </div>
-                <div class="input-group">
-                    <label for="endPort">End Port</label>
-                    <input type="text" id="endPort" placeholder="1000" value="1000">
-                </div>
-            </div>
-
-            <div class="scan-options">
-                <div class="checkbox-group">
-                    <input type="checkbox" id="scanTCP" checked>
-                    <label for="scanTCP">TCP Scan</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="scanUDP" checked>
-                    <label for="scanUDP">UDP Scan</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="detectService" checked>
-                    <label for="detectService">Service Detection</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="detectOS" checked>
-                    <label for="detectOS">OS Detection</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="checkAlive" checked>
-                    <label for="checkAlive">Check if Alive</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="traceroute">
-                    <label for="traceroute">Traceroute</label>
-                </div>
-            </div>
-
-            <button class="btn btn-primary" id="scanBtn" onclick="startScan()">
-                <span>🚀 Start Deep Scan</span>
-            </button>
-        </div>
-
-        <div class="progress-section" id="progressSection">
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                <div class="spinner"></div>
-                <div>
-                    <strong>Scanning in progress...</strong>
-                    <p id="progressText" style="color: #666; margin-top: 0.25rem;">Initializing... </p>
-                </div>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progressFill"></div>
-            </div>
-        </div>
-
-        <div class="results-section" id="resultsSection">
-            <div class="results-header">
-                <h2>Results</h2>
-                <div class="results-grid">
-                    <div class="stat-card">
-                        <div class="stat-label">Host</div>
-                        <div class="stat-value" id="hostIP" style="font-size: 1.2rem;">-</div>
-                        <div id="hostname" style="color: #666; margin-top: 0.5rem;">-</div>
-                        <div id="osInfo"></div>
-                    </div>
-                    <div class="stat-card success">
-                        <div class="stat-label">Open Ports</div>
-                        <div class="stat-value" id="openPorts">0</div>
-                    </div>
-                    <div class="stat-card warning">
-                        <div class="stat-label">Filtered Ports</div>
-                        <div class="stat-value" id="filteredPorts">0</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">Scan Duration</div>
-                        <div class="stat-value" id="scanDuration" style="font-size: 1.5rem;">-</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="table-container">
-                <div class="table-header">
-                    <h3 class="table-title">Ports</h3>
-                    <div class="filter-group">
-                        <label>Sort by:</label>
-                        <select id="sortBy" onchange="sortTable()">
-                            <option value="port">Port Number</option>
-                            <option value="protocol">Protocol</option>
-                            <option value="state">State</option>
-                            <option value="service">Service</option>
-                        </select>
-                        <select id="sortOrder" onchange="sortTable()">
-                            <option value="asc">Ascending</option>
-                            <option value="desc">Descending</option>
-                        </select>
-                    </div>
-                </div>
-
-                <table id="portsTable">
-                    <thead>
-                        <tr>
-                            <th onclick="sortTableByColumn(0)">Port</th>
-                            <th onclick="sortTableByColumn(1)">Protocol</th>
-                            <th onclick="sortTableByColumn(2)">State</th>
-                            <th onclick="sortTableByColumn(3)">Service</th>
-                            <th onclick="sortTableByColumn(4)">Product</th>
-                            <th onclick="sortTableByColumn(5)">Version</th>
-                            <th onclick="sortTableByColumn(6)">Details</th>
-                        </tr>
-                    </thead>
-                    <tbody id="portsTableBody">
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="scan-params">
-                <h3>Scan Parameters</h3>
-                <div class="param-grid">
-                    <div class="param-item">
-                        <span class="param-label">Host:</span>
-                        <span class="param-value" id="paramHost">-</span>
-                    </div>
-                    <div class="param-item">
-                        <span class="param-label">Protocol:</span>
-                        <span class="param-value" id="paramProtocol">-</span>
-                    </div>
-                    <div class="param-item">
-                        <span class="param-label">Scan Type:</span>
-                        <span class="param-value" id="paramScanType">-</span>
-                    </div>
-                    <div class="param-item">
-                        <span class="param-label">Ports:</span>
-                        <span class="param-value" id="paramPorts">-</span>
-                    </div>
-                    <div class="param-item">
-                        <span class="param-label">Check Alive:</span>
-                        <span class="param-value" id="paramAlive">-</span>
-                    </div>
-                    <div class="param-item">
-                        <span class="param-label">Service Detection:</span>
-                        <span class="param-value" id="paramService">-</span>
-                    </div>
-                    <div class="param-item">
-                        <span class="param-label">OS Detection:</span>
-                        <span class="param-value" id="paramOS">-</span>
-                    </div>
-                    <div class="param-item">
-                        <span class="param-label">Traceroute:</span>
-                        <span class="param-value" id="paramTrace">-</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="empty-state" id="emptyState">
-            <div class="empty-state-icon">🎯</div>
-            <h2>Ready to Scan</h2>
-            <p>Configure your scan parameters above and click "Start Deep Scan"</p>
-        </div>
-    </div>
-
-    <script>
-        let currentScanId = null;
-        let pollInterval = null;
-        let scanData = [];
-
-        document.getElementById('portRange').addEventListener('change', function() {
-            document.getElementById('customPortRow').style.display = 
-                this.value === 'custom' ? 'flex' : 'none';
-        });
-
-        function startScan() {
-            const target = document.getElementById('targetInput').value. trim();
-            if (!target) {
-                alert('Please enter a target host');
-                return;
-            }
-
-            const portRange = document.getElementById('portRange').value;
-            let ports = portRange;
-            if (portRange === 'custom') {
-                const start = document.getElementById('startPort').value;
-                const end = document.getElementById('endPort').value;
-                ports = `${start}-${end}`;
-            }
-
-            const config = {
-                target: target,
-                ports: ports,
-                scan_tcp: document.getElementById('scanTCP').checked,
-                scan_udp: document.getElementById('scanUDP').checked,
-                detect_service: document.getElementById('detectService').checked,
-                detect_os: document.getElementById('detectOS').checked,
-                check_alive:  document.getElementById('checkAlive').checked,
-                traceroute:  document.getElementById('traceroute').checked
-            };
-
-            document.getElementById('scanBtn').disabled = true;
-            document.getElementById('progressSection').classList.add('active');
-            document.getElementById('resultsSection').classList.remove('active');
-            document.getElementById('emptyState').style.display = 'none';
-            document.getElementById('progressFill').style.width = '10%';
-
-            fetch('/api/scan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert('Error: ' + data.error);
-                    resetUI();
-                    return;
+# Security: Rate limiting and consent tracking
+rate_limit_store = {}  # IP -> {count, first_request_time}
+rate_limit_lock = threading.Lock()
+consent_tokens = {}  # token -> {ip, timestamp}
+consent_lock = threading.Lock()
+
+# Rate limit settings
+MAX_SCANS_PER_HOUR = 10
+RATE_LIMIT_WINDOW = 3600  # 1 hour in seconds
+CONSENT_TOKEN_EXPIRY = 3600  # 1 hour
+SECRET_KEY = secrets.token_hex(32)  # For signing tokens
+
+# Scan queue system - only 1 scan at a time
+from queue import Queue
+import collections
+
+scan_queue = Queue()
+queue_order = collections.deque()  # Track queue order for position
+queue_lock = threading.Lock()
+current_scan_ip = None  # Track which IP is currently being scanned
+
+def queue_worker():
+    """Background worker that processes scans one at a time"""
+    global current_scan_ip
+    while True:
+        scan_job = scan_queue.get()
+        if scan_job is None:
+            break
+        
+        scan_id, target, config, resolved_ip = scan_job
+        
+        with queue_lock:
+            current_scan_ip = resolved_ip
+            if resolved_ip in queue_order:
+                queue_order.remove(resolved_ip)
+        
+        try:
+            config['_validated_ip'] = resolved_ip
+            scanner = DeepScanner(target, config)
+            results = scanner.run_scan()
+            with scan_lock:
+                scan_results[scan_id] = results
+        except Exception as e:
+            with scan_lock:
+                scan_results[scan_id] = {
+                    'status': 'error',
+                    'error': str(e)
                 }
-                currentScanId = data.scan_id;
-                pollResults();
-            })
-            .catch(error => {
-                alert('Error: ' + error);
-                resetUI();
-            });
-        }
+        finally:
+            with queue_lock:
+                current_scan_ip = None
+            scan_queue.task_done()
 
-        function pollResults() {
-            let progress = 20;
-            pollInterval = setInterval(() => {
-                fetch(`/api/results/${currentScanId}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.error) {
-                            clearInterval(pollInterval);
-                            alert('Error: ' + data.error);
-                            resetUI();
-                            return;
-                        }
-
-                        document.getElementById('progressText').textContent = data.step || 'Processing...';
-                        progress = Math.min(progress + 5, 95);
-                        document.getElementById('progressFill').style.width = progress + '%';
-
-                        if (data.status === 'completed') {
-                            clearInterval(pollInterval);
-                            document. getElementById('progressFill').style.width = '100%';
-                            setTimeout(() => displayResults(data), 500);
-                        } else if (data.status === 'error') {
-                            clearInterval(pollInterval);
-                            alert('Scan error: ' + data.error);
-                            resetUI();
-                        }
-                    })
-                    .catch(error => {
-                        clearInterval(pollInterval);
-                        alert('Error: ' + error);
-                        resetUI();
-                    });
-            }, 2000);
-        }
-
-        function displayResults(data) {
-            document.getElementById('progressSection').classList.remove('active');
-            document.getElementById('resultsSection').classList.add('active');
-            document.getElementById('scanBtn').disabled = false;
-
-            // Header info
-            document.getElementById('hostIP').textContent = data.ip_address || '-';
-            document. getElementById('hostname').textContent = data.hostname || '-';
-            
-            if (data.os_guess && data.os_guess !== 'Unknown') {
-                document.getElementById('osInfo').innerHTML = 
-                    `<div class="os-badge">🖥️ ${data.os_guess}</div>`;
-            }
-
-            // Stats
-            const openCount = data.ports ?  data.ports.filter(p => p. state === 'open').length : 0;
-            const filteredCount = data.ports ? data. ports.filter(p => p. state === 'filtered').length : 0;
-            
-            document.getElementById('openPorts').textContent = openCount;
-            document.getElementById('filteredPorts').textContent = filteredCount;
-            document.getElementById('scanDuration').textContent = data.scan_duration || '-';
-
-            // Scan parameters
-            document.getElementById('paramHost').textContent = data.target;
-            document.getElementById('paramProtocol').textContent = data. protocols || 'TCP/UDP';
-            document.getElementById('paramScanType').textContent = data.scan_type || 'Deep Scan';
-            document.getElementById('paramPorts').textContent = data.port_range || '-';
-            document.getElementById('paramAlive').textContent = data. check_alive ?  'True' : 'False';
-            document.getElementById('paramService').textContent = data.detect_service ?  'True' : 'False';
-            document.getElementById('paramOS').textContent = data.detect_os ? 'True' :  'False';
-            document. getElementById('paramTrace').textContent = data.traceroute ? 'True' : 'False';
-
-            // Ports table
-            scanData = data.ports || [];
-            renderTable(scanData);
-        }
-
-        function renderTable(ports) {
-            const tbody = document.getElementById('portsTableBody');
-            tbody.innerHTML = '';
-
-            if (ports.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">No open or filtered ports detected</td></tr>';
-                return;
-            }
-
-            ports. forEach(port => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td><span class="port-badge">${port.port}</span></td>
-                    <td><span class="protocol-badge protocol-${port.protocol. toLowerCase()}">${port.protocol.toUpperCase()}</span></td>
-                    <td><span class="state-${port.state.toLowerCase()}">${port.state}</span></td>
-                    <td>${port.service || '-'}</td>
-                    <td>${port.product || '-'}</td>
-                    <td>${port.version || '-'}</td>
-                    <td>${port.details || '-'}</td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        function sortTable() {
-            const sortBy = document.getElementById('sortBy').value;
-            const order = document.getElementById('sortOrder').value;
-
-            const sorted = [...scanData]. sort((a, b) => {
-                let aVal = a[sortBy];
-                let bVal = b[sortBy];
-
-                if (sortBy === 'port') {
-                    aVal = parseInt(aVal);
-                    bVal = parseInt(bVal);
-                }
-
-                if (order === 'asc') {
-                    return aVal > bVal ? 1 :  -1;
-                } else {
-                    return aVal < bVal ? 1 : -1;
-                }
-            });
-
-            renderTable(sorted);
-        }
-
-        function resetUI() {
-            document.getElementById('scanBtn').disabled = false;
-            document.getElementById('progressSection').classList.remove('active');
-            if (! document.getElementById('resultsSection').classList.contains('active')) {
-                document.getElementById('emptyState').style.display = 'block';
-            }
-        }
-    </script>
-</body>
-</html>
-"""
+# Start the queue worker thread
+queue_thread = threading.Thread(target=queue_worker, daemon=True)
+queue_thread.start()
 
 # Scanner implementation
 class DeepScanner:
@@ -850,19 +109,28 @@ class DeepScanner:
 
     def resolve_target(self):
         """Resolve hostname to IP"""
+        # Use pre-validated IP if available (from security check)
+        if self.config.get('_validated_ip'):
+            self.ip_address = self.config['_validated_ip']
+            try:
+                self.hostname = socket.gethostbyaddr(self.ip_address)[0]
+            except:
+                self.hostname = self.target
+            return
+        
         try:
             ipaddress.ip_address(self.target)
             self.ip_address = self.target
             try:
                 self.hostname = socket.gethostbyaddr(self.target)[0]
             except: 
-                self.hostname = self. target
+                self.hostname = self.target
         except ValueError:
             try:
                 self.ip_address = socket.gethostbyname(self.target)
                 self.hostname = self.target
             except socket.gaierror:
-                raise Exception(f"Could not resolve:  {self.target}")
+                raise Exception(f"Could not resolve: {self.target}")
 
     def check_alive(self):
         """Ping host to check if alive"""
@@ -871,6 +139,9 @@ class DeepScanner:
             return
         
         try:
+            if not self.ip_address:
+                self.alive = False
+                return
             param = '-n' if os.name == 'nt' else '-c'
             start = time.time()
             result = subprocess.run(
@@ -885,10 +156,10 @@ class DeepScanner:
             self.alive = False
 
     def scan_tcp_port(self, port):
-        """Scan single TCP port"""
+        """Scan single TCP port - optimized for speed"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1.5)
+            sock.settimeout(0.5)  # Faster timeout
             result = sock.connect_ex((self.ip_address, port))
             sock.close()
             
@@ -899,144 +170,404 @@ class DeepScanner:
         return None
 
     def scan_udp_port(self, port):
-        """Scan single UDP port"""
+        """Scan single UDP port - only return if we get an actual response"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(2)
+            sock.settimeout(3)
             
-            # Send empty packet
-            sock.sendto(b'', (self.ip_address, port))
+            # Send protocol-specific probes for better detection
+            probe = self.get_udp_probe(port)
+            sock.sendto(probe, (self.ip_address, port))
             
             try:
                 data, _ = sock.recvfrom(1024)
                 sock.close()
-                return {'port': port, 'protocol': 'udp', 'state': 'open'}
+                # Only return if we got actual data back - this is a confirmed open port
+                if data:
+                    return {'port': port, 'protocol': 'udp', 'state': 'open'}
             except socket.timeout:
-                # Timeout usually means open|filtered for UDP
+                # No response - could be open, closed, or filtered
+                # Don't report these as they're unreliable
                 sock.close()
-                return {'port': port, 'protocol':  'udp', 'state': 'open|filtered'}
+                return None
+        except:
+            pass
+        return None
+    
+    def get_udp_probe(self, port):
+        """Get protocol-specific UDP probe for better detection"""
+        probes = {
+            53: self.build_dns_query('google.com'),  # Real DNS query for google.com
+            123: b'\x1b' + b'\x00' * 47,  # NTP request
+            161: b'\x30\x26\x02\x01\x01\x04\x06public\xa0\x19\x02\x04\x00\x00\x00\x00\x02\x01\x00\x02\x01\x00\x30\x0b\x30\x09\x06\x05\x2b\x06\x01\x02\x01\x05\x00',  # SNMP
+            137: b'\x80\xf0\x00\x10\x00\x01\x00\x00\x00\x00\x00\x00\x20CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\x00\x00\x21\x00\x01',  # NetBIOS
+            1900: b'M-SEARCH * HTTP/1.1\r\nHost:239.255.255.250:1900\r\nST:ssdp:all\r\nMan:"ssdp:discover"\r\nMX:3\r\n\r\n',  # SSDP
+            5353: b'\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x09_services\x07_dns-sd\x04_udp\x05local\x00\x00\x0c\x00\x01',  # mDNS
+        }
+        return probes.get(port, b'\x00')
+    
+    def build_dns_query(self, domain):
+        """Build a proper DNS query packet for a domain"""
+        # Transaction ID (random)
+        packet = struct.pack('>H', random.randint(0, 65535))
+        # Flags: standard query
+        packet += struct.pack('>H', 0x0100)
+        # Questions: 1, Answers: 0, Authority: 0, Additional: 0
+        packet += struct.pack('>HHHH', 1, 0, 0, 0)
+        # Query name
+        for part in domain.split('.'):
+            packet += struct.pack('B', len(part)) + part.encode()
+        packet += b'\x00'  # End of name
+        # Type: A record (1), Class: IN (1)
+        packet += struct.pack('>HH', 1, 1)
+        return packet
+    
+    def detect_dns_service(self, protocol):
+        """Detect DNS server by actually querying it"""
+        try:
+            # Test with a real DNS query to google.com
+            query = self.build_dns_query('google.com')
+            
+            if protocol == 'tcp':
+                # TCP DNS uses length prefix
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(5)
+                sock.connect((self.ip_address, 53))
+                # Send with 2-byte length prefix for TCP DNS
+                sock.send(struct.pack('>H', len(query)) + query)
+                # Read response length
+                length_data = sock.recv(2)
+                if length_data:
+                    resp_len = struct.unpack('>H', length_data)[0]
+                    response = sock.recv(resp_len)
+                else:
+                    response = None
+                sock.close()
+            else:
+                # UDP DNS
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.settimeout(5)
+                sock.sendto(query, (self.ip_address, 53))
+                response, _ = sock.recvfrom(512)
+                sock.close()
+            
+            if response and len(response) > 12:
+                # Got a valid DNS response!
+                # Try to detect DNS server type from response
+                product, version = self.identify_dns_server(response)
+                return 'DNS Response OK', product, version
+                
+        except socket.timeout:
+            return 'DNS (no response)', None, None
+        except Exception as e:
+            pass
+        return None, None, None
+    
+    def identify_dns_server(self, response):
+        """Try to identify DNS server from response"""
+        # Most DNS servers don't reveal themselves in regular queries
+        # We'd need to do a CHAOS TXT query for version.bind to detect
+        # For now, return generic DNS server
+        try:
+            # Try a CHAOS TXT version.bind query
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(3)
+            
+            # Build version.bind query
+            packet = struct.pack('>H', random.randint(0, 65535))  # Transaction ID
+            packet += struct.pack('>H', 0x0100)  # Standard query
+            packet += struct.pack('>HHHH', 1, 0, 0, 0)  # 1 question
+            # version.bind
+            packet += b'\x07version\x04bind\x00'
+            # Type TXT (16), Class CHAOS (3)
+            packet += struct.pack('>HH', 16, 3)
+            
+            sock.sendto(packet, (self.ip_address, 53))
+            version_resp, _ = sock.recvfrom(512)
+            sock.close()
+            
+            if len(version_resp) > 12:
+                # Try to extract version string from response
+                version_str = self.parse_dns_txt_response(version_resp)
+                if version_str:
+                    # Identify server from version string
+                    version_lower = version_str.lower()
+                    if 'bind' in version_lower or 'named' in version_lower:
+                        match = re.search(r'(\d+\.\d+\.?\d*)', version_str)
+                        return 'BIND', match.group(1) if match else None
+                    elif 'dnsmasq' in version_lower:
+                        match = re.search(r'(\d+\.\d+)', version_str)
+                        return 'dnsmasq', match.group(1) if match else None
+                    elif 'unbound' in version_lower:
+                        return 'Unbound', None
+                    elif 'powerdns' in version_lower:
+                        return 'PowerDNS', None
+                    else:
+                        return 'DNS Server', version_str[:20]
+                        
+        except:
+            pass
+        
+        return 'DNS Server', None
+    
+    def parse_dns_txt_response(self, response):
+        """Parse TXT record from DNS response"""
+        try:
+            # Skip header (12 bytes) and question section
+            pos = 12
+            # Skip question name
+            while pos < len(response) and response[pos] != 0:
+                if response[pos] & 0xc0 == 0xc0:  # Pointer
+                    pos += 2
+                    break
+                pos += response[pos] + 1
+            else:
+                pos += 1
+            # Skip question type and class
+            pos += 4
+            
+            # Parse answer
+            if pos + 12 < len(response):
+                # Skip answer name (could be pointer)
+                if response[pos] & 0xc0 == 0xc0:
+                    pos += 2
+                else:
+                    while pos < len(response) and response[pos] != 0:
+                        pos += response[pos] + 1
+                    pos += 1
+                
+                # Skip type, class, TTL
+                pos += 8
+                # Read data length
+                if pos + 2 <= len(response):
+                    rdlength = struct.unpack('>H', response[pos:pos+2])[0]
+                    pos += 2
+                    if pos + rdlength <= len(response):
+                        # TXT format: length byte + string
+                        txt_len = response[pos]
+                        if pos + 1 + txt_len <= len(response):
+                            return response[pos+1:pos+1+txt_len].decode('utf-8', errors='ignore')
         except:
             pass
         return None
 
     def get_service_name(self, port, protocol):
         """Get service name for port"""
+        # Check custom services FIRST for better naming
+        services = {
+            80: 'http', 443: 'https', 22: 'ssh', 21: 'ftp', 23: 'telnet',
+            25: 'smtp', 53: 'dns', 67: 'dhcp', 68: 'dhcp', 110: 'pop3', 143: 'imap', 3306: 'mysql',
+            5432: 'postgresql', 6379: 'redis', 27017: 'mongodb', 3389: 'rdp',
+            5900: 'vnc', 8080: 'http-proxy', 8443: 'https-alt', 445: 'smb',
+            139: 'netbios', 389: 'ldap', 636: 'ldaps', 1433: 'mssql', 
+            8000: 'http-alt', 9200: 'elasticsearch', 5672: 'amqp', 1521: 'oracle'
+        }
+        if port in services:
+            return services[port]
+        
+        # Fall back to system lookup
         try:
             return socket.getservbyport(port, protocol)
         except:
-            # Custom common services
-            services = {
-                80: 'http', 443: 'https', 22: 'ssh', 21: 'ftp', 23: 'telnet',
-                25: 'smtp', 53: 'dns', 110: 'pop3', 143: 'imap', 3306: 'mysql',
-                5432: 'postgresql', 6379: 'redis', 27017: 'mongodb', 3389: 'rdp',
-                5900: 'vnc', 8080: 'http-proxy', 8443: 'https-alt', 445: 'smb',
-                139: 'netbios', 389: 'ldap', 636: 'ldaps', 1433: 'mssql', 
-                8000: 'http-alt', 9200: 'elasticsearch', 5672: 'amqp', 1521: 'oracle'
-            }
-            return services. get(port, 'unknown')
+            return 'unknown'
 
     def detect_service(self, port, protocol):
-        """Detect service and version"""
+        """Detect service and version with improved banner grabbing"""
+        
+        # Special handling for DNS on port 53
+        if port == 53:
+            return self.detect_dns_service(protocol)
+        
         if protocol != 'tcp': 
             return None, None, None
         
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(3)
+            sock.settimeout(5)
             sock.connect((self.ip_address, port))
             
-            # Try to grab banner
-            if port in [80, 8080, 8000, 8443]: 
-                request = f"GET / HTTP/1.1\r\nHost: {self.ip_address}\r\n\r\n"
-                sock.send(request.encode())
-            else:
-                sock.send(b"\r\n")
+            banner = ""
             
-            banner = sock.recv(2048).decode('utf-8', errors='ignore')
+            # Try different probes based on port
+            if port in [80, 8080, 8000, 8443, 443, 8888, 3000, 5000]:
+                # HTTP probe
+                request = f"HEAD / HTTP/1.1\r\nHost: {self.ip_address}\r\nUser-Agent: Mozilla/5.0\r\nConnection: close\r\n\r\n"
+                sock.send(request.encode())
+                try:
+                    banner = sock.recv(4096).decode('utf-8', errors='ignore')
+                except:
+                    pass
+            elif port == 21:
+                # FTP - just wait for banner
+                try:
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                except:
+                    pass
+            elif port == 22:
+                # SSH - just wait for banner
+                try:
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                except:
+                    pass
+            elif port == 25 or port == 587:
+                # SMTP - wait for greeting
+                try:
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                except:
+                    pass
+            elif port == 3306:
+                # MySQL - wait for greeting
+                try:
+                    banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                except:
+                    pass
+            else:
+                # Generic - send newline and wait
+                try:
+                    sock.send(b"\r\n")
+                    banner = sock.recv(2048).decode('utf-8', errors='ignore')
+                except:
+                    pass
+            
             sock.close()
             
             # Parse banner for product/version
             product, version = self.parse_banner(banner, port)
-            return banner[: 100], product, version
+            return banner[:100] if banner else None, product, version
             
-        except:
+        except Exception as e:
             return None, None, None
 
     def parse_banner(self, banner, port):
         """Parse banner for product and version"""
+        if not banner:
+            return None, None
+            
         product = None
         version = None
         
         banner_lower = banner.lower()
         
         # HTTP servers
-        if 'server: ' in banner_lower:
-            match = re.search(r'server:\s*([^\r\n]+)', banner_lower)
+        if 'server:' in banner_lower:
+            match = re.search(r'server:\s*([^\r\n]+)', banner, re.IGNORECASE)
             if match: 
                 server_info = match.group(1).strip()
-                parts = server_info.split('/')
-                product = parts[0]. strip()
-                if len(parts) > 1:
-                    version = parts[1].split()[0].strip()
+                # Parse server string
+                if '/' in server_info:
+                    parts = server_info.split('/')
+                    product = parts[0].strip()
+                    if len(parts) > 1:
+                        version = parts[1].split()[0].strip()
+                else:
+                    product = server_info.split()[0] if server_info else None
         
-        # SSH
-        elif 'ssh' in banner_lower:
-            match = re.search(r'ssh-([\d\.]+)', banner_lower)
-            product = 'OpenSSH' if 'openssh' in banner_lower else 'SSH'
-            if match:
-                version = match. group(1)
+        # Check for common products in banner
+        product_patterns = [
+            (r'nginx[/\s]*([\d\.]+)?', 'nginx'),
+            (r'apache[/\s]*([\d\.]+)?', 'Apache'),
+            (r'uvicorn', 'Uvicorn'),
+            (r'gunicorn[/\s]*([\d\.]+)?', 'Gunicorn'),
+            (r'openssh[_\-\s]*([\d\.p]+)?', 'OpenSSH'),
+            (r'ssh-([\d\.]+)', 'SSH'),
+            (r'proftpd\s*([\d\.a-z]+)?', 'ProFTPD'),
+            (r'vsftpd\s*([\d\.]+)?', 'vsftpd'),
+            (r'pure-ftpd', 'Pure-FTPd'),
+            (r'filezilla', 'FileZilla'),
+            (r'microsoft-iis[/\s]*([\d\.]+)?', 'IIS'),
+            (r'postfix', 'Postfix'),
+            (r'exim', 'Exim'),
+            (r'sendmail', 'Sendmail'),
+            (r'mysql', 'MySQL'),
+            (r'mariadb', 'MariaDB'),
+            (r'postgresql', 'PostgreSQL'),
+            (r'redis', 'Redis'),
+            (r'mongodb', 'MongoDB'),
+            (r'node\.?js', 'Node.js'),
+            (r'express', 'Express'),
+            (r'flask', 'Flask'),
+            (r'django', 'Django'),
+            (r'tomcat[/\s]*([\d\.]+)?', 'Tomcat'),
+            (r'jetty[/\s]*([\d\.]+)?', 'Jetty'),
+        ]
         
-        # FTP
-        elif port == 21 or 'ftp' in banner_lower:
-            if 'proftpd' in banner_lower:
-                product = 'ProFTPD'
-                match = re.search(r'proftpd\s+([\d\.a-z]+)', banner_lower)
+        if not product:
+            for pattern, name in product_patterns:
+                match = re.search(pattern, banner_lower)
                 if match:
-                    version = match.group(1)
-            elif 'vsftpd' in banner_lower:
-                product = 'vsftpd'
-                match = re.search(r'vsftpd\s+([\d\.]+)', banner_lower)
-                if match:
-                    version = match.group(1)
+                    product = name
+                    if match.lastindex and match.group(1):
+                        version = match.group(1)
+                    break
         
-        # MySQL
-        elif 'mysql' in banner_lower or port == 3306:
-            product = 'MySQL'
-            match = re.search(r'([\d\.]+)', banner)
-            if match:
-                version = match.group(1)
-        
-        return product or '-', version or '-'
+        return product, version
 
     def detect_os(self):
-        """Detect operating system"""
+        """Detect operating system using multiple methods"""
+        os_hints = []
+        
+        # Method 1: TTL from ping
         try:
-            param = '-n' if os.name == 'nt' else '-c'
-            result = subprocess.run(
-                ['ping', param, '1', self. ip_address],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            
-            ttl_match = re.search(r'ttl[=\s]+(\d+)', result.stdout.lower())
-            if ttl_match:
-                ttl = int(ttl_match.group(1))
-                if 0 < ttl <= 64:
-                    self.os_guess = 'Linux'
-                elif 64 < ttl <= 128:
-                    self.os_guess = 'Windows'
-                elif 128 < ttl <= 255:
-                    self.os_guess = 'Cisco/Network Device'
-            
-            # Refine based on open ports
-            tcp_ports = [p['port'] for p in self.ports if p['protocol'] == 'tcp']
-            if 3389 in tcp_ports or 445 in tcp_ports:
-                self.os_guess = 'Windows'
-            elif 22 in tcp_ports and 80 in tcp_ports:
-                self. os_guess = 'Linux'
+            if self.ip_address:
+                param = '-n' if os.name == 'nt' else '-c'
+                result = subprocess.run(
+                    ['ping', param, '1', self.ip_address],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                
+                # Try multiple TTL patterns
+                ttl_match = re.search(r'ttl[=:\s]+(\d+)', result.stdout.lower())
+                if ttl_match:
+                    ttl = int(ttl_match.group(1))
+                    if ttl <= 64:
+                        os_hints.append(('Linux/Unix', 3))
+                    elif ttl <= 128:
+                        os_hints.append(('Windows', 3))
+                    else:
+                        os_hints.append(('Network Device', 2))
         except:
             pass
+        
+        # Method 2: Port-based fingerprinting
+        tcp_ports = set(p['port'] for p in self.ports if p['protocol'] == 'tcp' and p['state'] == 'open')
+        
+        # Windows indicators
+        if 3389 in tcp_ports:
+            os_hints.append(('Windows', 4))
+        if 445 in tcp_ports and 139 in tcp_ports:
+            os_hints.append(('Windows', 3))
+        if 135 in tcp_ports:
+            os_hints.append(('Windows', 2))
+            
+        # Linux indicators
+        if 22 in tcp_ports:
+            os_hints.append(('Linux/Unix', 2))
+        if 111 in tcp_ports:  # portmapper
+            os_hints.append(('Linux/Unix', 2))
+            
+        # Web server - check service banners
+        for p in self.ports:
+            if p.get('product'):
+                product_lower = p.get('product', '').lower()
+                if 'iis' in product_lower or 'microsoft' in product_lower:
+                    os_hints.append(('Windows', 4))
+                elif 'apache' in product_lower or 'nginx' in product_lower:
+                    os_hints.append(('Linux/Unix', 2))
+                elif 'uvicorn' in product_lower or 'gunicorn' in product_lower:
+                    os_hints.append(('Linux/Unix', 2))
+        
+        # Calculate most likely OS
+        if os_hints:
+            os_scores: dict[str, int] = {}
+            for os_name, weight in os_hints:
+                os_scores[os_name] = os_scores.get(os_name, 0) + weight
+            
+            best_os = max(os_scores.keys(), key=lambda x: os_scores[x])
+            self.os_guess = best_os
+        else:
+            self.os_guess = 'Unknown'
 
     def get_ports_to_scan(self):
         """Get list of ports to scan"""
@@ -1057,50 +588,55 @@ class DeepScanner:
             return self.top_100_tcp, self.top_100_udp[: 50]
 
     def scan_ports(self):
-        """Scan all ports"""
+        """Scan all ports - optimized for speed"""
         tcp_ports, udp_ports = self.get_ports_to_scan()
         
         results = []
         
-        # TCP Scan
+        # TCP Scan - use 500 workers for fast scanning
         if self.config.get('scan_tcp', True):
-            with ThreadPoolExecutor(max_workers=100) as executor:
+            # For full scans, use more workers
+            num_workers = 500 if len(tcp_ports) > 1000 else 200
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 futures = {executor.submit(self.scan_tcp_port, port): port for port in tcp_ports}
                 for future in as_completed(futures):
                     result = future.result()
                     if result:
-                        results. append(result)
+                        results.append(result)
         
         # UDP Scan
         if self.config.get('scan_udp', True):
-            with ThreadPoolExecutor(max_workers=50) as executor:
+            with ThreadPoolExecutor(max_workers=100) as executor:
                 futures = {executor.submit(self.scan_udp_port, port): port for port in udp_ports}
                 for future in as_completed(futures):
                     result = future.result()
                     if result:
-                        results. append(result)
+                        results.append(result)
         
         self.ports = results
 
     def enrich_ports(self):
         """Add service detection to ports"""
-        if not self.config.get('detect_service', True):
-            for port_info in self.ports:
-                port_info['service'] = self.get_service_name(port_info['port'], port_info['protocol'])
-                port_info['product'] = '-'
-                port_info['version'] = '-'
-                port_info['details'] = '-'
-            return
-        
         for port_info in self.ports:
             service_name = self.get_service_name(port_info['port'], port_info['protocol'])
             port_info['service'] = service_name
             
-            if port_info['state'] == 'open' and port_info['protocol'] == 'tcp':
-                banner, product, version = self.detect_service(port_info['port'], port_info['protocol'])
-                port_info['product'] = product or '-'
-                port_info['version'] = version or '-'
-                port_info['details'] = banner[: 50] if banner else '-'
+            if port_info['state'] == 'open' and self.config.get('detect_service', True):
+                # Special handling for DNS port 53 (works for both TCP and UDP)
+                if port_info['port'] == 53:
+                    banner, product, version = self.detect_dns_service(port_info['protocol'])
+                    port_info['product'] = product if product else 'DNS Server'
+                    port_info['version'] = version if version else '-'
+                    port_info['details'] = banner[:50] if banner else '-'
+                elif port_info['protocol'] == 'tcp':
+                    banner, product, version = self.detect_service(port_info['port'], port_info['protocol'])
+                    port_info['product'] = product if product else '-'
+                    port_info['version'] = version if version else '-'
+                    port_info['details'] = banner[:50] if banner else '-'
+                else:
+                    port_info['product'] = '-'
+                    port_info['version'] = '-'
+                    port_info['details'] = '-'
             else:
                 port_info['product'] = '-'
                 port_info['version'] = '-'
@@ -1166,10 +702,11 @@ class DeepScanner:
 
 # Flask routes
 scan_results = {}
+scan_lock = threading.Lock()
 
 @app.route('/')
 def index():
-    return HTML_TEMPLATE
+    return render_template('index.html')
 
 @app.route('/api/scan', methods=['POST'])
 def start_scan():
@@ -1179,31 +716,266 @@ def start_scan():
     if not target: 
         return jsonify({'error': 'Target required'}), 400
     
-    scan_id = f"{target}_{int(time.time())}"
+    # Basic input validation for security
+    target = target.strip()
+    if len(target) > 255:
+        return jsonify({'error': 'Target too long'}), 400
     
-    def run_scan_thread():
-        scanner = DeepScanner(target, data)
-        results = scanner.run_scan()
-        scan_results[scan_id] = results
+    # Security: Verify consent token
+    consent_token = request.cookies.get('scan_consent')
+    if not consent_token:
+        return jsonify({'error': 'You must agree to the terms before scanning. Please refresh the page and accept the consent.'}), 403
     
-    thread = threading.Thread(target=run_scan_thread)
-    thread.daemon = True
-    thread.start()
+    with consent_lock:
+        token_data = consent_tokens.get(consent_token)
+        if not token_data:
+            return jsonify({'error': 'Invalid consent token. Please refresh the page and accept the consent again.'}), 403
+        
+        # Check if token is expired
+        if time.time() - token_data['timestamp'] > CONSENT_TOKEN_EXPIRY:
+            del consent_tokens[consent_token]
+            return jsonify({'error': 'Consent expired. Please refresh the page and accept again.'}), 403
+        
+        # Verify token is from same IP (prevent token sharing)
+        if token_data['ip'] != request.remote_addr:
+            return jsonify({'error': 'Consent token mismatch. Please refresh and consent again.'}), 403
     
-    return jsonify({'scan_id': scan_id, 'status': 'started'})
+    # Security: Rate limiting
+    client_ip = request.remote_addr
+    with rate_limit_lock:
+        now = time.time()
+        if client_ip in rate_limit_store:
+            rate_data = rate_limit_store[client_ip]
+            # Reset if window has passed
+            if now - rate_data['first_request'] > RATE_LIMIT_WINDOW:
+                rate_limit_store[client_ip] = {'count': 1, 'first_request': now}
+            else:
+                if rate_data['count'] >= MAX_SCANS_PER_HOUR:
+                    remaining = int(RATE_LIMIT_WINDOW - (now - rate_data['first_request']))
+                    return jsonify({
+                        'error': f'Rate limit exceeded. Maximum {MAX_SCANS_PER_HOUR} scans per hour. Try again in {remaining // 60} minutes.'
+                    }), 429
+                rate_data['count'] += 1
+        else:
+            rate_limit_store[client_ip] = {'count': 1, 'first_request': now}
+    
+    # Security: Resolve and validate target is a GLOBAL (public) IP
+    try:
+        resolved_ip = resolve_and_validate_global_ip(target)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 403
+    
+    scan_id = f"{resolved_ip}_{int(time.time())}"
+    
+    # Check if this IP is already being scanned or in queue
+    with queue_lock:
+        if current_scan_ip == resolved_ip:
+            return jsonify({'error': 'This IP is already being scanned. Please wait for it to complete.'}), 409
+        if resolved_ip in queue_order:
+            position = list(queue_order).index(resolved_ip) + 1
+            return jsonify({'error': f'This IP is already in queue at position {position}. Please wait.'}), 409
+    
+    # Get queue position
+    with queue_lock:
+        queue_position = len(queue_order) + 1
+        queue_order.append(resolved_ip)
+    
+    # Store initial status BEFORE adding to queue
+    with scan_lock:
+        scan_results[scan_id] = {
+            'status': 'queued',
+            'target': target,
+            'ip_address': resolved_ip,
+            'queue_position': queue_position,
+            'step': f'In queue (position {queue_position})...' if queue_position > 1 else 'Starting scan...'
+        }
+    
+    # Add to queue (will be processed by worker)
+    scan_queue.put((scan_id, target, data.copy(), resolved_ip))
+    
+    return jsonify({'scan_id': scan_id, 'status': 'queued', 'queue_position': queue_position})
 
 @app.route('/api/results/<scan_id>')
 def get_results(scan_id):
-    results = scan_results.get(scan_id)
+    with scan_lock:
+        results = scan_results.get(scan_id)
     if not results:
         return jsonify({'error': 'Scan not found'}), 404
+    
+    # Update queue position if still queued
+    if results.get('status') == 'queued':
+        with queue_lock:
+            ip = results.get('ip_address')
+            if ip and ip in queue_order:
+                pos = list(queue_order).index(ip) + 1
+                results['queue_position'] = pos
+                results['step'] = f'In queue (position {pos})...' if pos > 1 else 'Starting soon...'
+            elif current_scan_ip == ip:
+                results['status'] = 'running'
+                results['step'] = 'Scanning...'
+    
     return jsonify(results)
 
+
+@app.route('/api/queue-status')
+def queue_status():
+    """Get current queue status"""
+    with queue_lock:
+        return jsonify({
+            'queue_length': len(queue_order),
+            'current_scan': current_scan_ip,
+            'queued_ips': list(queue_order)
+        })
+
+
+def resolve_and_validate_global_ip(hostname: str) -> str:
+    """Resolve hostname and validate it resolves to a global (public) IP only"""
+    try:
+        # First check if it's already an IP address
+        try:
+            ip_obj = ipaddress.ip_address(hostname)
+            if not ip_obj.is_global:
+                raise Exception(f"Target IP {ip_obj} is not a public/global address. Only public IPs can be scanned.")
+            return str(ip_obj)
+        except ValueError:
+            pass  # Not an IP, try to resolve as hostname
+        
+        # Resolve ALL A/AAAA answers and reject any non-global
+        infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        ips = []
+        for info in infos:
+            ip = info[4][0]
+            try:
+                ip_obj = ipaddress.ip_address(ip)
+                ips.append(ip_obj)
+            except ValueError:
+                continue
+        
+        if not ips:
+            raise Exception(f"Could not resolve hostname: {hostname}")
+        
+        # Check ALL resolved IPs - reject if ANY are non-global
+        for ip_obj in ips:
+            if not ip_obj.is_global:
+                raise Exception(
+                    f"Hostname '{hostname}' resolves to non-public IP ({ip_obj}). "
+                    f"Only public/global IPs can be scanned for security reasons."
+                )
+        
+        # Return the first valid global IP
+        return str(ips[0])
+        
+    except socket.gaierror as e:
+        raise Exception(f"Could not resolve hostname: {hostname}")
+
+
+@app.route('/api/consent', methods=['POST'])
+def accept_consent():
+    """User accepts consent to scan - generates a signed token"""
+    client_ip = request.remote_addr
+    
+    # Generate secure token
+    token = secrets.token_urlsafe(32)
+    
+    with consent_lock:
+        # Clean up old tokens periodically
+        now = time.time()
+        expired = [k for k, v in consent_tokens.items() if now - v['timestamp'] > CONSENT_TOKEN_EXPIRY]
+        for k in expired:
+            del consent_tokens[k]
+        
+        # Store new token
+        consent_tokens[token] = {
+            'ip': client_ip,
+            'timestamp': now
+        }
+    
+    response = make_response(jsonify({'status': 'consent_accepted'}))
+    response.set_cookie(
+        'scan_consent', 
+        token, 
+        max_age=CONSENT_TOKEN_EXPIRY,
+        httponly=True,
+        samesite='Strict'
+    )
+    return response
+
+
+@app.route('/api/my-ip')
+def get_my_ip():
+    """Return the user's public IP address"""
+    # Get the real client IP (considering proxies)
+    client_ip = request.headers.get('X-Forwarded-For')
+    if client_ip:
+        # X-Forwarded-For can contain multiple IPs, take the first one
+        client_ip = client_ip.split(',')[0].strip()
+    else:
+        client_ip = request.remote_addr or '0.0.0.0'
+    
+    return jsonify({'ip': client_ip})
+
+
+@app.route('/api/rate-limit-status')
+def rate_limit_status():
+    """Check current rate limit status for the user"""
+    client_ip = request.remote_addr
+    with rate_limit_lock:
+        now = time.time()
+        if client_ip in rate_limit_store:
+            rate_data = rate_limit_store[client_ip]
+            if now - rate_data['first_request'] > RATE_LIMIT_WINDOW:
+                remaining = MAX_SCANS_PER_HOUR
+                reset_in = 0
+            else:
+                remaining = MAX_SCANS_PER_HOUR - rate_data['count']
+                reset_in = int(RATE_LIMIT_WINDOW - (now - rate_data['first_request']))
+        else:
+            remaining = MAX_SCANS_PER_HOUR
+            reset_in = 0
+    
+    return jsonify({
+        'remaining_scans': remaining,
+        'max_scans_per_hour': MAX_SCANS_PER_HOUR,
+        'reset_in_seconds': reset_in
+    })
+
+
+@app.route('/health')
+def health():
+    """Health check endpoint for deployment platforms"""
+    return jsonify({'status': 'healthy'}), 200
+
+
+# Serve static files from root (favicons, manifest, etc.)
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(ROOT_DIR, 'favicon.ico', mimetype='image/x-icon')
+
+@app.route('/favicon.svg')
+def favicon_svg():
+    return send_from_directory(ROOT_DIR, 'favicon.svg', mimetype='image/svg+xml')
+
+@app.route('/favicon-<size>.png')
+def favicon_png(size):
+    return send_from_directory(ROOT_DIR, f'favicon-{size}.png', mimetype='image/png')
+
+@app.route('/icon-<size>.png')
+def icon_png(size):
+    return send_from_directory(ROOT_DIR, f'icon-{size}.png', mimetype='image/png')
+
+@app.route('/site.webmanifest')
+def manifest():
+    return send_from_directory(ROOT_DIR, 'site.webmanifest', mimetype='application/manifest+json')
+
 if __name__ == '__main__': 
+    port = int(os.environ.get('PORT', 5000))
+    
     print("=" * 70)
     print("🔍 DEEP NETWORK SCANNER")
     print("=" * 70)
-    print("Server running on:  http://localhost:5000")
+    print(f"Server running on: http://0.0.0.0:{port}")
     print("Features:")
     print("  ✓ TCP & UDP port scanning")
     print("  ✓ Service detection and banner grabbing")
@@ -1211,6 +983,6 @@ if __name__ == '__main__':
     print("  ✓ All 65,535 ports supported")
     print("  ✓ Professional tabular results display")
     print("=" * 70)
-    print("\nOpen http://localhost:5000 in your browser\n")
+    print(f"\nOpen http://localhost:{port} in your browser\n")
     
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)

@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Scanner</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#0b0f14">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: #1a1a1a;
+            border-bottom: 1px solid #2a2a2a;
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 3rem 0;
+        }
+
+        .hero h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            background: linear-gradient(135deg, #fff, #a0a0a0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            color: #888;
+            font-size: 1.1rem;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .card-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .card-icon {
+            width: 36px;
+            height: 36px;
+            background: #2a2a2a;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group.full {
+            grid-column: 1 / -1;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        .form-input::placeholder {
+            color: #555;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+        }
+
+        .option-chip {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .option-chip:hover {
+            border-color: #444;
+            background: #1a1a1a;
+        }
+
+        .option-chip input {
+            display: none;
+        }
+
+        .option-chip input:checked + .chip-check {
+            background: #3b82f6;
+            border-color: #3b82f6;
+        }
+
+        .option-chip input:checked + .chip-check::after {
+            content: '✓';
+            color: #fff;
+            font-size: 0.7rem;
+        }
+
+        .chip-check {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #444;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .chip-label {
+            color: #ccc;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: inherit;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: #fff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-card {
+            display: none;
+        }
+
+        .progress-card.active {
+            display: block;
+        }
+
+        .progress-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .progress-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #2a2a2a;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .progress-info h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.25rem;
+        }
+
+        .progress-info p {
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #2a2a2a;
+            border-radius: 2px;
+            margin-top: 1rem;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .results-card {
+            display: none;
+        }
+
+        .results-card.active {
+            display: block;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-box {
+            background: #0f0f0f;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .stat-box.highlight {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.05);
+        }
+
+        .stat-box.warning {
+            border-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-box.highlight .stat-value {
+            color: #22c55e;
+        }
+
+        .stat-box.warning .stat-value {
+            color: #f59e0b;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .host-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #0f0f0f;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+        }
+
+        .host-avatar {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .host-details h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .host-details p {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .os-tag {
+            margin-left: auto;
+            padding: 0.5rem 1rem;
+            background: #2a2a2a;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #ccc;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 1rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #151515;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        td {
+            padding: 1rem;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #1f1f1f;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: #151515;
+        }
+
+        .port-num {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-weight: 600;
+            color: #3b82f6;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-tcp {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+        }
+
+        .badge-udp {
+            background: rgba(168, 85, 247, 0.15);
+            color: #c084fc;
+        }
+
+        .badge-open {
+            background: rgba(34, 197, 94, 0.15);
+            color: #4ade80;
+        }
+
+        .badge-filtered {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+        }
+
+        .badge-closed {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+        }
+
+        .empty-row td {
+            text-align: center;
+            padding: 3rem;
+            color: #555;
+        }
+
+        .welcome-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .welcome-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .welcome-state h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .welcome-state p {
+            color: #666;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid, .options-grid, .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .host-info {
+                flex-wrap: wrap;
+            }
+
+            .os-tag {
+                margin-left: 0;
+                margin-top: 0.5rem;
+            }
+        }
+
+        /* Consent Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-overlay.hidden {
+            display: none;
+        }
+
+        .modal {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 20px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .modal-icon {
+            font-size: 2rem;
+        }
+
+        .modal p {
+            color: #999;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+
+        .modal ul {
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+            color: #bbb;
+        }
+
+        .modal ul li {
+            margin-bottom: 0.5rem;
+        }
+
+        .consent-checkbox {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 1rem;
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 12px;
+            margin: 1.5rem 0;
+            cursor: pointer;
+        }
+
+        .consent-checkbox input {
+            width: 20px;
+            height: 20px;
+            margin-top: 2px;
+            accent-color: #3b82f6;
+        }
+
+        .consent-checkbox span {
+            color: #ccc;
+            font-size: 0.95rem;
+        }
+
+        .btn-agree {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+
+        .btn-agree:hover:not(:disabled) {
+            box-shadow: 0 8px 20px rgba(34, 197, 94, 0.3);
+        }
+
+        .btn-agree:disabled {
+            background: #333;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        /* Rate limit badge */
+        .rate-limit-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .rate-limit-badge .count {
+            color: #22c55e;
+            font-weight: 600;
+        }
+
+        .rate-limit-badge.warning .count {
+            color: #f59e0b;
+        }
+
+        .rate-limit-badge.critical .count {
+            color: #ef4444;
+        }
+
+        .security-notice {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            border-radius: 10px;
+            font-size: 0.85rem;
+            color: #4ade80;
+            margin-bottom: 1rem;
+        }
+
+        .loading-ip {
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">
+            <div class="logo-icon">🔍</div>
+            <span>Deep Scanner</span>
+        </div>
+        <div class="rate-limit-badge" id="rateLimitBadge">
+            <span>Scans remaining:</span>
+            <span class="count" id="scansRemaining">-</span>
+        </div>
+    </nav>
+
+    <!-- Consent Modal -->
+    <div class="modal-overlay" id="consentModal">
+        <div class="modal">
+            <h2><span class="modal-icon">⚠️</span> Terms of Use</h2>
+            <p><strong>Before you can use Deep Scanner, you must agree to the following:</strong></p>
+            <ul>
+                <li>I have <strong>explicit authorization</strong> to scan the target system</li>
+                <li>I understand that unauthorized scanning may be <strong>illegal</strong></li>
+                <li>I will only scan <strong>public IP addresses</strong> that I own or have permission to test</li>
+                <li>I accept responsibility for my use of this tool</li>
+                <li>I understand this service is <strong>rate-limited</strong> to prevent abuse</li>
+            </ul>
+            <p style="color: #f59e0b;">🔒 Only public/global IP addresses can be scanned. Private, local, and reserved IPs are blocked for security.</p>
+            <label class="consent-checkbox">
+                <input type="checkbox" id="consentCheck" onchange="updateAgreeButton()">
+                <span>I confirm that I have authorization to scan the target and I accept full responsibility for my actions.</span>
+            </label>
+            <button class="btn btn-agree" id="agreeBtn" disabled onclick="acceptConsent()">
+                I Agree & Continue
+            </button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="hero">
+            <h1>Network Port Scanner</h1>
+            <p>Fast, reliable port scanning with service detection and OS fingerprinting</p>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon">🎯</div>
+                <h2>Scan Configuration</h2>
+            </div>
+
+            <div class="security-notice">
+                <span>🔒</span>
+                <span>Only public IP addresses can be scanned. You must have authorization.</span>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label class="form-label">Target Host</label>
+                    <input type="text" class="form-input" id="targetInput" placeholder="Loading your IP...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Port Range</label>
+                    <select class="form-select" id="portRange">
+                        <option value="top100">Top 100 Ports</option>
+                        <option value="top1000">Top 1000 Ports</option>
+                        <option value="all">All Ports (1-65535)</option>
+                        <option value="custom">Custom Range</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-grid" id="customPortRow" style="display: none;">
+                <div class="form-group">
+                    <label class="form-label">Start Port</label>
+                    <input type="text" class="form-input" id="startPort" placeholder="1" value="1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">End Port</label>
+                    <input type="text" class="form-input" id="endPort" placeholder="1000" value="1000">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Scan Options</label>
+                <div class="options-grid">
+                    <label class="option-chip">
+                        <input type="checkbox" id="scanTCP" checked>
+                        <span class="chip-check"></span>
+                        <span class="chip-label">TCP Scan</span>
+                    </label>
+                    <label class="option-chip">
+                        <input type="checkbox" id="scanUDP">
+                        <span class="chip-check"></span>
+                        <span class="chip-label">UDP Scan</span>
+                    </label>
+                    <label class="option-chip">
+                        <input type="checkbox" id="detectService" checked>
+                        <span class="chip-check"></span>
+                        <span class="chip-label">Services</span>
+                    </label>
+                    <label class="option-chip">
+                        <input type="checkbox" id="detectOS" checked>
+                        <span class="chip-check"></span>
+                        <span class="chip-label">OS Detection</span>
+                    </label>
+                    <label class="option-chip">
+                        <input type="checkbox" id="checkAlive" checked>
+                        <span class="chip-check"></span>
+                        <span class="chip-label">Ping Check</span>
+                    </label>
+                    <label class="option-chip">
+                        <input type="checkbox" id="traceroute">
+                        <span class="chip-check"></span>
+                        <span class="chip-label">Traceroute</span>
+                    </label>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" id="scanBtn" onclick="startScan()">
+                Start Scan
+            </button>
+        </div>
+
+        <div class="card progress-card" id="progressSection">
+            <div class="progress-content">
+                <div class="progress-spinner"></div>
+                <div class="progress-info">
+                    <h3>Scanning...</h3>
+                    <p id="progressText">Initializing scan</p>
+                </div>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <div class="card results-card" id="resultsSection">
+            <div class="card-header">
+                <div class="card-icon">📊</div>
+                <h2>Scan Results</h2>
+            </div>
+
+            <div class="host-info">
+                <div class="host-avatar">🖥️</div>
+                <div class="host-details">
+                    <h3 id="hostIP">-</h3>
+                    <p id="hostname">-</p>
+                </div>
+                <div class="os-tag" id="osInfo">Unknown OS</div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-box highlight">
+                    <div class="stat-value" id="openPorts">0</div>
+                    <div class="stat-label">Open Ports</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="tcpCount">0</div>
+                    <div class="stat-label">TCP</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="udpCount">0</div>
+                    <div class="stat-label">UDP</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="scanDuration">-</div>
+                    <div class="stat-label">Duration</div>
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Port</th>
+                            <th>Protocol</th>
+                            <th>State</th>
+                            <th>Service</th>
+                            <th>Product</th>
+                            <th>Version</th>
+                        </tr>
+                    </thead>
+                    <tbody id="portsTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card welcome-state" id="emptyState">
+            <div class="welcome-icon">🎯</div>
+            <h2>Ready to scan</h2>
+            <p>Enter a target host above to discover open ports and running services</p>
+        </div>
+    </div>
+
+    <script>
+        let currentScanId = null;
+        let pollInterval = null;
+        let scanData = [];
+        let hasConsent = false;
+
+        // Check for existing consent and load IP on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkConsent();
+            loadMyIP();
+            loadRateLimitStatus();
+        });
+
+        function checkConsent() {
+            // Check if consent cookie exists
+            const cookies = document.cookie.split(';');
+            for (let c of cookies) {
+                if (c.trim().startsWith('scan_consent=')) {
+                    hasConsent = true;
+                    document.getElementById('consentModal').classList.add('hidden');
+                    return;
+                }
+            }
+            // Show consent modal
+            document.getElementById('consentModal').classList.remove('hidden');
+        }
+
+        function updateAgreeButton() {
+            document.getElementById('agreeBtn').disabled = !document.getElementById('consentCheck').checked;
+        }
+
+        function acceptConsent() {
+            fetch('/api/consent', {
+                method: 'POST',
+                credentials: 'same-origin'
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.status === 'consent_accepted') {
+                    hasConsent = true;
+                    document.getElementById('consentModal').classList.add('hidden');
+                }
+            })
+            .catch(function(error) {
+                alert('Error accepting consent: ' + error);
+            });
+        }
+
+        function loadMyIP() {
+            fetch('/api/my-ip')
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.ip) {
+                    document.getElementById('targetInput').value = data.ip;
+                    document.getElementById('targetInput').placeholder = 'Enter IP or hostname';
+                }
+            })
+            .catch(function(error) {
+                document.getElementById('targetInput').placeholder = 'Enter IP or hostname';
+            });
+        }
+
+        function loadRateLimitStatus() {
+            fetch('/api/rate-limit-status')
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                updateRateLimitBadge(data.remaining_scans, data.max_scans_per_hour);
+            })
+            .catch(function() {});
+        }
+
+        function updateRateLimitBadge(remaining, max) {
+            const badge = document.getElementById('rateLimitBadge');
+            const countEl = document.getElementById('scansRemaining');
+            countEl.textContent = remaining + '/' + max;
+            
+            badge.classList.remove('warning', 'critical');
+            if (remaining <= 2) {
+                badge.classList.add('critical');
+            } else if (remaining <= 5) {
+                badge.classList.add('warning');
+            }
+        }
+
+        document.getElementById('portRange').addEventListener('change', function() {
+            document.getElementById('customPortRow').style.display = 
+                this.value === 'custom' ? 'grid' : 'none';
+        });
+
+        function startScan() {
+            if (!hasConsent) {
+                document.getElementById('consentModal').classList.remove('hidden');
+                return;
+            }
+
+            const target = document.getElementById('targetInput').value.trim();
+            if (!target) {
+                alert('Please enter a target host');
+                return;
+            }
+
+            const portRange = document.getElementById('portRange').value;
+            let ports = portRange;
+            if (portRange === 'custom') {
+                const start = document.getElementById('startPort').value;
+                const end = document.getElementById('endPort').value;
+                ports = start + '-' + end;
+            }
+
+            const config = {
+                target: target,
+                ports: ports,
+                scan_tcp: document.getElementById('scanTCP').checked,
+                scan_udp: document.getElementById('scanUDP').checked,
+                detect_service: document.getElementById('detectService').checked,
+                detect_os: document.getElementById('detectOS').checked,
+                check_alive: document.getElementById('checkAlive').checked,
+                traceroute: document.getElementById('traceroute').checked
+            };
+
+            document.getElementById('scanBtn').disabled = true;
+            document.getElementById('progressSection').classList.add('active');
+            document.getElementById('resultsSection').classList.remove('active');
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('progressFill').style.width = '5%';
+            document.getElementById('progressText').textContent = 'Starting scan...';
+
+            fetch('/api/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config),
+                credentials: 'same-origin'
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    alert('Error: ' + data.error);
+                    resetUI();
+                    // Reload rate limit status
+                    loadRateLimitStatus();
+                    // Check if consent expired
+                    if (data.error.includes('consent')) {
+                        hasConsent = false;
+                        document.getElementById('consentModal').classList.remove('hidden');
+                        document.getElementById('consentCheck').checked = false;
+                        updateAgreeButton();
+                    }
+                    return;
+                }
+                currentScanId = data.scan_id;
+                // Update rate limit after starting scan
+                loadRateLimitStatus();
+                pollResults();
+            })
+            .catch(function(error) {
+                alert('Connection error: ' + error);
+                resetUI();
+            });
+        }
+
+        function pollResults() {
+            let progress = 10;
+            let pollCount = 0;
+            
+            pollInterval = setInterval(function() {
+                pollCount++;
+                
+                fetch('/api/results/' + currentScanId)
+                    .then(function(response) { return response.json(); })
+                    .then(function(data) {
+                        if (data.error === 'Scan not found') {
+                            if (pollCount > 30) {
+                                clearInterval(pollInterval);
+                                alert('Scan timed out');
+                                resetUI();
+                            }
+                            return;
+                        }
+                        
+                        if (data.error) {
+                            clearInterval(pollInterval);
+                            alert('Error: ' + data.error);
+                            resetUI();
+                            return;
+                        }
+
+                        document.getElementById('progressText').textContent = data.step || 'Processing...';
+                        
+                        if (data.step) {
+                            if (data.step.includes('queue') || data.step.includes('Queue')) progress = 5;
+                            else if (data.step.includes('Starting')) progress = 10;
+                            else if (data.step.includes('Resolving')) progress = 15;
+                            else if (data.step.includes('alive')) progress = 25;
+                            else if (data.step.includes('Scanning')) progress = 50;
+                            else if (data.step.includes('services')) progress = 75;
+                            else if (data.step.includes('operating')) progress = 90;
+                            else if (data.step.includes('complete')) progress = 100;
+                        }
+                        
+                        // Show queue position if queued
+                        if (data.status === 'queued' && data.queue_position) {
+                            document.getElementById('progressText').textContent = 
+                                'In queue (position ' + data.queue_position + ')... Please wait.';
+                        }
+                        
+                        document.getElementById('progressFill').style.width = progress + '%';
+
+                        if (data.status === 'completed') {
+                            clearInterval(pollInterval);
+                            document.getElementById('progressFill').style.width = '100%';
+                            setTimeout(function() { displayResults(data); }, 300);
+                        } else if (data.status === 'error') {
+                            clearInterval(pollInterval);
+                            alert('Scan error: ' + (data.error || 'Unknown error'));
+                            resetUI();
+                        }
+                    })
+                    .catch(function(error) {
+                        if (pollCount > 30) {
+                            clearInterval(pollInterval);
+                            alert('Connection lost');
+                            resetUI();
+                        }
+                    });
+            }, 1500);
+        }
+
+        function displayResults(data) {
+            document.getElementById('progressSection').classList.remove('active');
+            document.getElementById('resultsSection').classList.add('active');
+            document.getElementById('scanBtn').disabled = false;
+
+            document.getElementById('hostIP').textContent = data.ip_address || data.target || '-';
+            document.getElementById('hostname').textContent = data.hostname || '-';
+            document.getElementById('osInfo').textContent = data.os_guess || 'Unknown OS';
+
+            var ports = data.ports || [];
+            // Only show open ports (not filtered or open|filtered)
+            var openPorts = ports.filter(function(p) { return p.state === 'open'; });
+            var tcpCount = openPorts.filter(function(p) { return p.protocol === 'tcp'; }).length;
+            var udpCount = openPorts.filter(function(p) { return p.protocol === 'udp'; }).length;
+            
+            document.getElementById('openPorts').textContent = openPorts.length;
+            document.getElementById('tcpCount').textContent = tcpCount;
+            document.getElementById('udpCount').textContent = udpCount;
+            document.getElementById('scanDuration').textContent = data.scan_duration || '-';
+
+            scanData = openPorts;
+            renderTable(openPorts);
+        }
+
+        function renderTable(ports) {
+            var tbody = document.getElementById('portsTableBody');
+            tbody.innerHTML = '';
+
+            if (ports.length === 0) {
+                tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No open ports found</td></tr>';
+                return;
+            }
+
+            ports.forEach(function(port) {
+                var row = document.createElement('tr');
+                var protocolClass = port.protocol === 'tcp' ? 'badge-tcp' : 'badge-udp';
+                var stateClass = 'badge-' + port.state.split('|')[0];
+                
+                row.innerHTML = 
+                    '<td><span class="port-num">' + port.port + '</span></td>' +
+                    '<td><span class="badge ' + protocolClass + '">' + port.protocol.toUpperCase() + '</span></td>' +
+                    '<td><span class="badge ' + stateClass + '">' + port.state + '</span></td>' +
+                    '<td>' + (port.service || '-') + '</td>' +
+                    '<td>' + (port.product || '-') + '</td>' +
+                    '<td>' + (port.version || '-') + '</td>';
+                tbody.appendChild(row);
+            });
+        }
+
+        function resetUI() {
+            document.getElementById('scanBtn').disabled = false;
+            document.getElementById('progressSection').classList.remove('active');
+            if (!document.getElementById('resultsSection').classList.contains('active')) {
+                document.getElementById('emptyState').style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>
