@@ -278,6 +278,10 @@
             to { transform: rotate(360deg); }
         }
 
+        .progress-info {
+            flex: 1;
+        }
+
         .progress-info h3 {
             font-size: 1rem;
             font-weight: 600;
@@ -290,11 +294,33 @@
             color: #888;
         }
 
+        .progress-percent {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #3b82f6;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .progress-stats {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            font-size: 0.85rem;
+            color: #888;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .progress-current {
+            color: #666;
+            margin-left: auto;
+        }
+
         .progress-bar {
-            height: 4px;
+            height: 6px;
             background: #2a2a2a;
-            border-radius: 2px;
-            margin-top: 1rem;
+            border-radius: 3px;
+            margin-top: 0.75rem;
             overflow: hidden;
         }
 
@@ -302,7 +328,20 @@
             height: 100%;
             background: linear-gradient(90deg, #3b82f6, #8b5cf6);
             width: 0%;
-            transition: width 0.3s;
+            transition: width 0.2s ease-out;
+        }
+
+        .progress-open {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            font-size: 0.9rem;
+            color: #4ade80;
+        }
+
+        .open-icon {
+            font-size: 0.7rem;
         }
 
         .results-card {
@@ -909,12 +948,20 @@
             <div class="progress-content">
                 <div class="progress-spinner"></div>
                 <div class="progress-info">
-                    <h3>Scanning...</h3>
+                    <h3 id="progressTitle">Scanning...</h3>
                     <p id="progressText">Initializing scan</p>
                 </div>
+                <div class="progress-percent" id="progressPercent">0%</div>
+            </div>
+            <div class="progress-stats">
+                <span id="progressScanned">0</span> / <span id="progressTotal">0</span> ports
+                <span class="progress-current" id="progressCurrent"></span>
             </div>
             <div class="progress-bar">
                 <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-open" id="progressOpen">
+                <span class="open-icon">🟢</span> <span id="openFoundCount">0</span> open ports found
             </div>
         </div>
 
@@ -1168,8 +1215,14 @@
         }
 
         function pollResults() {
-            let progress = 10;
             let pollCount = 0;
+            
+            // Reset progress display
+            document.getElementById('progressPercent').textContent = '0%';
+            document.getElementById('progressScanned').textContent = '0';
+            document.getElementById('progressTotal').textContent = '0';
+            document.getElementById('progressCurrent').textContent = '';
+            document.getElementById('openFoundCount').textContent = '0';
             
             pollInterval = setInterval(function() {
                 pollCount++;
@@ -1178,7 +1231,7 @@
                     .then(function(response) { return response.json(); })
                     .then(function(data) {
                         if (data.error === 'Scan not found') {
-                            if (pollCount > 30) {
+                            if (pollCount > 60) {
                                 clearInterval(pollInterval);
                                 alert('Scan timed out');
                                 resetUI();
@@ -1193,30 +1246,43 @@
                             return;
                         }
 
+                        // Update progress text
                         document.getElementById('progressText').textContent = data.step || 'Processing...';
                         
-                        if (data.step) {
-                            if (data.step.includes('queue') || data.step.includes('Queue')) progress = 5;
-                            else if (data.step.includes('Starting')) progress = 10;
-                            else if (data.step.includes('Resolving')) progress = 15;
-                            else if (data.step.includes('alive')) progress = 25;
-                            else if (data.step.includes('Scanning')) progress = 50;
-                            else if (data.step.includes('services')) progress = 75;
-                            else if (data.step.includes('operating')) progress = 90;
-                            else if (data.step.includes('complete')) progress = 100;
+                        // Update live progress from server
+                        var progress = data.progress || 0;
+                        document.getElementById('progressPercent').textContent = progress + '%';
+                        document.getElementById('progressFill').style.width = progress + '%';
+                        
+                        // Update port counts
+                        if (data.scanned !== undefined) {
+                            document.getElementById('progressScanned').textContent = data.scanned;
+                        }
+                        if (data.total_ports !== undefined && data.total_ports > 0) {
+                            document.getElementById('progressTotal').textContent = data.total_ports;
+                        }
+                        
+                        // Show current port being scanned
+                        if (data.current_port) {
+                            document.getElementById('progressCurrent').textContent = '→ ' + data.current_port;
+                        }
+                        
+                        // Show open ports found so far
+                        if (data.open_found !== undefined) {
+                            document.getElementById('openFoundCount').textContent = data.open_found;
                         }
                         
                         // Show queue position if queued
                         if (data.status === 'queued' && data.queue_position) {
                             document.getElementById('progressText').textContent = 
                                 'In queue (position ' + data.queue_position + ')... Please wait.';
+                            document.getElementById('progressPercent').textContent = '⏳';
                         }
-                        
-                        document.getElementById('progressFill').style.width = progress + '%';
 
                         if (data.status === 'completed') {
                             clearInterval(pollInterval);
                             document.getElementById('progressFill').style.width = '100%';
+                            document.getElementById('progressPercent').textContent = '100%';
                             setTimeout(function() { displayResults(data); }, 300);
                         } else if (data.status === 'error') {
                             clearInterval(pollInterval);
@@ -1225,13 +1291,13 @@
                         }
                     })
                     .catch(function(error) {
-                        if (pollCount > 30) {
+                        if (pollCount > 60) {
                             clearInterval(pollInterval);
                             alert('Connection lost');
                             resetUI();
                         }
                     });
-            }, 1500);
+            }, 500);  // Poll faster for smoother updates
         }
 
         function displayResults(data) {

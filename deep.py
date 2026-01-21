@@ -102,7 +102,8 @@ def queue_worker():
         try:
             config['_validated_ip'] = resolved_ip
             scanner = DeepScanner(target, config)
-            results = scanner.run_scan()
+            # Pass scan_id and results store for live progress updates
+            results = scanner.run_scan(scan_id=scan_id, results_store=scan_results)
             with scan_lock:
                 scan_results[scan_id] = results
         except Exception as e:
@@ -807,18 +808,38 @@ class DeepScanner:
         
         return hops
 
-    def scan_ports(self):
-        """Scan all ports - optimized for speed"""
+    def scan_ports(self, progress_callback=None):
+        """Scan all ports - optimized for speed with progress tracking"""
         tcp_ports, udp_ports = self.get_ports_to_scan()
         
         results = []
+        total_ports = 0
+        if self.config.get('scan_tcp', True):
+            total_ports += len(tcp_ports)
+        if self.config.get('scan_udp', True):
+            total_ports += len(udp_ports)
+        
+        scanned = [0]  # Use list to allow mutation in nested function
+        
+        def scan_tcp_with_progress(port):
+            result = self.scan_tcp_port(port)
+            scanned[0] += 1
+            if progress_callback:
+                progress_callback(scanned[0], total_ports, 'tcp', port)
+            return result
+        
+        def scan_udp_with_progress(port):
+            result = self.scan_udp_port(port)
+            scanned[0] += 1
+            if progress_callback:
+                progress_callback(scanned[0], total_ports, 'udp', port)
+            return result
         
         # TCP Scan - use 500 workers for fast scanning
         if self.config.get('scan_tcp', True):
-            # For full scans, use more workers
             num_workers = 500 if len(tcp_ports) > 1000 else 200
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                futures = {executor.submit(self.scan_tcp_port, port): port for port in tcp_ports}
+                futures = {executor.submit(scan_tcp_with_progress, port): port for port in tcp_ports}
                 for future in as_completed(futures):
                     result = future.result()
                     if result:
@@ -827,7 +848,7 @@ class DeepScanner:
         # UDP Scan
         if self.config.get('scan_udp', True):
             with ThreadPoolExecutor(max_workers=100) as executor:
-                futures = {executor.submit(self.scan_udp_port, port): port for port in udp_ports}
+                futures = {executor.submit(scan_udp_with_progress, port): port for port in udp_ports}
                 for future in as_completed(futures):
                     result = future.result()
                     if result:
@@ -870,50 +891,112 @@ class DeepScanner:
                 port_info['details'] = '-'
                 port_info['banner'] = None
 
-    def run_scan(self):
-        """Execute full scan"""
+    def run_scan(self, scan_id=None, results_store=None):
+        """Execute full scan with live progress updates"""
         self.start_time = time.time()
         results = {
             'status': 'running',
             'target': self.target,
-            'step': 'Starting scan.. .'
+            'step': 'Starting scan...',
+            'progress': 0,
+            'scanned': 0,
+            'total_ports': 0,
+            'current_port': None,
+            'open_found': 0
         }
+        
+        # Store reference for live updates
+        if scan_id and results_store is not None:
+            with scan_lock:
+                results_store[scan_id] = results
+        
+        def update_progress(scanned, total, protocol, port):
+            """Callback to update progress in real-time"""
+            if scan_id and results_store is not None:
+                progress = int((scanned / total) * 100) if total > 0 else 0
+                open_count = len([p for p in self.ports if p.get('state') == 'open']) if hasattr(self, 'ports') else 0
+                with scan_lock:
+                    if scan_id in results_store:
+                        results_store[scan_id]['progress'] = progress
+                        results_store[scan_id]['scanned'] = scanned
+                        results_store[scan_id]['total_ports'] = total
+                        results_store[scan_id]['current_port'] = f"{protocol.upper()}:{port}"
+                        results_store[scan_id]['step'] = f"Scanning ports... {scanned}/{total} ({progress}%)"
         
         try:
             # Step 1: Resolve
             results['step'] = 'Resolving target...'
+            results['progress'] = 2
+            if scan_id and results_store is not None:
+                with scan_lock:
+                    results_store[scan_id] = results.copy()
+            
             self.resolve_target()
             results['ip_address'] = self.ip_address
             results['hostname'] = self.hostname
             
             # Step 2: Check alive
             results['step'] = 'Checking if host is alive...'
-            self. check_alive()
-            results['is_alive'] = self.alive
+            results['progress'] = 5
+            if scan_id and results_store is not None:
+                with scan_lock:
+                    results_store[scan_id] = results.copy()
             
-            # Step 3: Scan ports
-            results['step'] = 'Scanning ports (this may take several minutes)...'
-            self.scan_ports()
+            self.check_alive()
+            results['is_alive'] = self.alive
+            results['latency'] = self.latency
+            
+            # Calculate total ports for progress
+            tcp_ports, udp_ports = self.get_ports_to_scan()
+            total = 0
+            if self.config.get('scan_tcp', True):
+                total += len(tcp_ports)
+            if self.config.get('scan_udp', True):
+                total += len(udp_ports)
+            results['total_ports'] = total
+            
+            # Step 3: Scan ports with progress callback
+            results['step'] = f'Scanning {total} ports...'
+            results['progress'] = 10
+            if scan_id and results_store is not None:
+                with scan_lock:
+                    results_store[scan_id] = results.copy()
+            
+            self.scan_ports(progress_callback=update_progress)
             
             # Step 4: Service detection
             results['step'] = 'Detecting services...'
+            results['progress'] = 85
+            if scan_id and results_store is not None:
+                with scan_lock:
+                    results_store[scan_id] = results.copy()
+            
             self.enrich_ports()
             
             # Step 5: OS detection
             if self.config.get('detect_os', True):
                 results['step'] = 'Detecting operating system...'
+                results['progress'] = 92
+                if scan_id and results_store is not None:
+                    with scan_lock:
+                        results_store[scan_id] = results.copy()
                 self.detect_os()
             
             # Step 6: Traceroute (if enabled)
             traceroute_data = []
             if self.config.get('traceroute', False):
                 results['step'] = 'Running traceroute...'
+                results['progress'] = 96
+                if scan_id and results_store is not None:
+                    with scan_lock:
+                        results_store[scan_id] = results.copy()
                 traceroute_data = self.run_traceroute()
             
             # Final results
             duration = round(time.time() - self.start_time, 2)
             results['status'] = 'completed'
             results['step'] = 'Scan complete!'
+            results['progress'] = 100
             results['ports'] = sorted(self.ports, key=lambda x: x['port'])
             results['os_guess'] = self.os_guess
             results['scan_duration'] = f"{duration}s"
@@ -929,6 +1012,7 @@ class DeepScanner:
             results['traceroute'] = self.config.get('traceroute', False)
             results['traceroute_data'] = traceroute_data
             results['latency'] = self.latency
+            results['open_found'] = len([p for p in self.ports if p.get('state') == 'open'])
             
         except Exception as e:
             results['status'] = 'error'
