@@ -86,7 +86,7 @@ class DeepScanner:
         self.latency = None
         self.start_time = None
         
-        # Common ports
+        # Common ports - includes game servers, Minecraft, etc.
         self.top_100_tcp = [21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 443, 445, 993, 995, 
                             1723, 3306, 3389, 5900, 8080, 8443, 20, 69, 137, 138, 161, 162, 389,
                             636, 1433, 1434, 1521, 2049, 2121, 3268, 5432, 5800, 5901, 6379, 8000,
@@ -95,7 +95,19 @@ class DeepScanner:
                             2222, 3000, 3128, 3690, 4443, 4444, 4567, 5000, 5001, 5060, 5222,
                             5269, 5357, 5432, 5555, 5672, 5985, 5986, 6000, 6001, 6379, 6666,
                             7001, 7070, 7777, 8001, 8009, 8042, 8069, 8082, 8083, 8181, 8200,
-                            8300, 8500, 8600, 8834, 9001, 9080, 9081, 9418, 9999, 11211, 27018]
+                            8300, 8500, 8600, 8834, 9001, 9080, 9081, 9418, 9999, 11211, 27018,
+                            # Game servers
+                            25565, 25566, 25567,  # Minecraft Java
+                            19132, 19133,  # Minecraft Bedrock (also UDP)
+                            27015, 27016,  # Source games (CS, TF2, etc.)
+                            7777, 7778,  # Terraria, Ark, Unreal
+                            2456, 2457, 2458,  # Valheim
+                            6567,  # Starbound
+                            28015, 28016,  # Rust
+                            16261, 16262,  # Project Zomboid
+                            34197,  # Factorio
+                            11211,  # Memcached
+                            ]
         
         self.top_100_udp = [53, 67, 68, 69, 123, 135, 137, 138, 139, 161, 162, 445, 500, 514, 520,
                             631, 1434, 1900, 4500, 49152, 49153, 49154, 5353, 1701, 1812, 1813,
@@ -105,7 +117,14 @@ class DeepScanner:
                             3283, 3456, 4000, 5000, 5001, 5004, 5005, 5351, 6346, 9200, 10080,
                             11487, 16464, 16465, 16470, 16471, 17185, 19283, 19682, 20031, 26000,
                             26262, 30120, 31337, 32768, 32769, 32770, 32771, 32772, 32773, 32774,
-                            32775, 33281, 41524, 44818, 49152, 49153, 49154, 54321, 57621, 58002]
+                            32775, 33281, 41524, 44818, 49152, 49153, 49154, 54321, 57621, 58002,
+                            # Game servers
+                            19132, 19133,  # Minecraft Bedrock
+                            27015, 27016,  # Source games (CS, TF2)
+                            7777, 7778,  # Ark, Unreal
+                            2456, 2457, 2458,  # Valheim
+                            34197,  # Factorio
+                            ]
 
     def resolve_target(self):
         """Resolve hostname to IP"""
@@ -196,6 +215,9 @@ class DeepScanner:
     
     def get_udp_probe(self, port):
         """Get protocol-specific UDP probe for better detection"""
+        # Build Minecraft Bedrock probe dynamically
+        mc_bedrock_probe = b'\x01' + struct.pack('>Q', int(time.time() * 1000)) + b'\x00\xff\xff\x00\xfe\xfe\xfe\xfe\xfd\xfd\xfd\xfd\x12\x34\x56\x78' + b'\x00' * 8
+        
         probes = {
             53: self.build_dns_query('google.com'),  # Real DNS query for google.com
             123: b'\x1b' + b'\x00' * 47,  # NTP request
@@ -203,6 +225,12 @@ class DeepScanner:
             137: b'\x80\xf0\x00\x10\x00\x01\x00\x00\x00\x00\x00\x00\x20CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\x00\x00\x21\x00\x01',  # NetBIOS
             1900: b'M-SEARCH * HTTP/1.1\r\nHost:239.255.255.250:1900\r\nST:ssdp:all\r\nMan:"ssdp:discover"\r\nMX:3\r\n\r\n',  # SSDP
             5353: b'\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x09_services\x07_dns-sd\x04_udp\x05local\x00\x00\x0c\x00\x01',  # mDNS
+            # Minecraft Bedrock - Unconnected Ping packet (RakNet)
+            19132: mc_bedrock_probe,
+            19133: mc_bedrock_probe,
+            # Source engine query
+            27015: b'\xff\xff\xff\xffTSource Engine Query\x00',
+            27016: b'\xff\xff\xff\xffTSource Engine Query\x00',
         }
         return probes.get(port, b'\x00')
     
@@ -360,7 +388,17 @@ class DeepScanner:
             5432: 'postgresql', 6379: 'redis', 27017: 'mongodb', 3389: 'rdp',
             5900: 'vnc', 8080: 'http-proxy', 8443: 'https-alt', 445: 'smb',
             139: 'netbios', 389: 'ldap', 636: 'ldaps', 1433: 'mssql', 
-            8000: 'http-alt', 9200: 'elasticsearch', 5672: 'amqp', 1521: 'oracle'
+            8000: 'http-alt', 9200: 'elasticsearch', 5672: 'amqp', 1521: 'oracle',
+            # Game servers
+            25565: 'minecraft', 25566: 'minecraft', 25567: 'minecraft',
+            19132: 'minecraft-bedrock', 19133: 'minecraft-bedrock',
+            27015: 'source-server', 27016: 'source-server',
+            7777: 'game-server', 7778: 'game-server',
+            2456: 'valheim', 2457: 'valheim', 2458: 'valheim',
+            6567: 'starbound',
+            28015: 'rust', 28016: 'rust-rcon',
+            16261: 'zomboid', 16262: 'zomboid',
+            34197: 'factorio',
         }
         if port in services:
             return services[port]
@@ -397,6 +435,28 @@ class DeepScanner:
                     banner = sock.recv(4096).decode('utf-8', errors='ignore')
                 except:
                     pass
+            elif port in [25565, 25566, 25567]:
+                # Minecraft Java - send Server List Ping
+                try:
+                    # Handshake packet
+                    host = (self.ip_address or '').encode('utf-8')
+                    handshake = b'\x00'  # Packet ID
+                    handshake += b'\xff\x05'  # Protocol version (vanilla)
+                    handshake += bytes([len(host)]) + host  # Server address
+                    handshake += struct.pack('>H', port)  # Port
+                    handshake += b'\x01'  # Next state (status)
+                    
+                    # Wrap in length prefix
+                    packet = bytes([len(handshake)]) + handshake
+                    sock.send(packet)
+                    
+                    # Status request
+                    sock.send(b'\x01\x00')
+                    
+                    # Read response
+                    banner = sock.recv(4096).decode('utf-8', errors='ignore')
+                except:
+                    banner = 'Minecraft Server'
             elif port == 21:
                 # FTP - just wait for banner
                 try:
@@ -489,6 +549,13 @@ class DeepScanner:
             (r'django', 'Django'),
             (r'tomcat[/\s]*([\d\.]+)?', 'Tomcat'),
             (r'jetty[/\s]*([\d\.]+)?', 'Jetty'),
+            # Game servers
+            (r'minecraft', 'Minecraft'),
+            (r'spigot', 'Spigot'),
+            (r'paper', 'Paper'),
+            (r'bukkit', 'Bukkit'),
+            (r'forge', 'Minecraft Forge'),
+            (r'fabric', 'Minecraft Fabric'),
         ]
         
         if not product:
@@ -499,6 +566,22 @@ class DeepScanner:
                     if match.lastindex and match.group(1):
                         version = match.group(1)
                     break
+        
+        # Special handling for Minecraft JSON response
+        if not product and ('version' in banner_lower and 'players' in banner_lower):
+            try:
+                # Try to parse Minecraft server response JSON
+                json_match = re.search(r'\{.*"version".*\}', banner)
+                if json_match:
+                    mc_data = json.loads(json_match.group())
+                    if 'version' in mc_data:
+                        product = 'Minecraft'
+                        if isinstance(mc_data['version'], dict):
+                            version = mc_data['version'].get('name')
+                        else:
+                            version = str(mc_data['version'])
+            except:
+                product = 'Minecraft'
         
         return product, version
 
@@ -587,6 +670,66 @@ class DeepScanner:
         else:
             return self.top_100_tcp, self.top_100_udp[: 50]
 
+    def run_traceroute(self):
+        """Run traceroute to target"""
+        hops = []
+        try:
+            if not self.ip_address:
+                return hops
+            
+            # Use traceroute command
+            cmd = ['traceroute', '-n', '-m', '20', '-w', '2', self.ip_address]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            
+            lines = result.stdout.strip().split('\n')
+            for line in lines[1:]:  # Skip header
+                parts = line.split()
+                if len(parts) >= 2:
+                    hop_num = parts[0]
+                    try:
+                        hop_num = int(hop_num)
+                    except:
+                        continue
+                    
+                    # Parse IP and latency
+                    hop_ip = None
+                    latencies = []
+                    
+                    for part in parts[1:]:
+                        if part == '*':
+                            continue
+                        elif re.match(r'\d+\.\d+\.\d+\.\d+', part):
+                            hop_ip = part
+                        elif part.replace('.', '').replace('ms', '').isdigit() or 'ms' in part:
+                            try:
+                                lat = float(part.replace('ms', ''))
+                                latencies.append(lat)
+                            except:
+                                pass
+                    
+                    avg_latency = round(sum(latencies) / len(latencies), 2) if latencies else None
+                    
+                    # Try to get hostname for hop
+                    hop_hostname = None
+                    if hop_ip:
+                        try:
+                            hop_hostname = socket.gethostbyaddr(hop_ip)[0]
+                        except:
+                            pass
+                    
+                    hops.append({
+                        'hop': hop_num,
+                        'ip': hop_ip or '*',
+                        'hostname': hop_hostname,
+                        'latency': f"{avg_latency}ms" if avg_latency else '*'
+                    })
+        except subprocess.TimeoutExpired:
+            hops.append({'hop': 0, 'ip': 'Timeout', 'hostname': None, 'latency': '*'})
+        except Exception as e:
+            hops.append({'hop': 0, 'ip': f'Error: {str(e)[:30]}', 'hostname': None, 'latency': '*'})
+        
+        return hops
+
     def scan_ports(self):
         """Scan all ports - optimized for speed"""
         tcp_ports, udp_ports = self.get_ports_to_scan()
@@ -628,19 +771,27 @@ class DeepScanner:
                     port_info['product'] = product if product else 'DNS Server'
                     port_info['version'] = version if version else '-'
                     port_info['details'] = banner[:50] if banner else '-'
+                    port_info['banner'] = banner if banner else None
                 elif port_info['protocol'] == 'tcp':
                     banner, product, version = self.detect_service(port_info['port'], port_info['protocol'])
                     port_info['product'] = product if product else '-'
                     port_info['version'] = version if version else '-'
                     port_info['details'] = banner[:50] if banner else '-'
+                    # Include raw banner for unknown services
+                    if service_name == 'unknown' and banner:
+                        port_info['banner'] = banner.strip()[:200]
+                    else:
+                        port_info['banner'] = None
                 else:
                     port_info['product'] = '-'
                     port_info['version'] = '-'
                     port_info['details'] = '-'
+                    port_info['banner'] = None
             else:
                 port_info['product'] = '-'
                 port_info['version'] = '-'
                 port_info['details'] = '-'
+                port_info['banner'] = None
 
     def run_scan(self):
         """Execute full scan"""
@@ -661,7 +812,7 @@ class DeepScanner:
             # Step 2: Check alive
             results['step'] = 'Checking if host is alive...'
             self. check_alive()
-            results['alive'] = self.alive
+            results['is_alive'] = self.alive
             
             # Step 3: Scan ports
             results['step'] = 'Scanning ports (this may take several minutes)...'
@@ -676,6 +827,12 @@ class DeepScanner:
                 results['step'] = 'Detecting operating system...'
                 self.detect_os()
             
+            # Step 6: Traceroute (if enabled)
+            traceroute_data = []
+            if self.config.get('traceroute', False):
+                results['step'] = 'Running traceroute...'
+                traceroute_data = self.run_traceroute()
+            
             # Final results
             duration = round(time.time() - self.start_time, 2)
             results['status'] = 'completed'
@@ -686,13 +843,15 @@ class DeepScanner:
             results['scan_type'] = 'Deep Scan'
             results['protocols'] = []
             if self.config.get('scan_tcp'): results['protocols'].append('TCP')
-            if self.config. get('scan_udp'): results['protocols'].append('UDP')
+            if self.config.get('scan_udp'): results['protocols'].append('UDP')
             results['protocols'] = '/'.join(results['protocols'])
-            results['port_range'] = self.config. get('ports', 'top100')
+            results['port_range'] = self.config.get('ports', 'top100')
             results['check_alive'] = self.config.get('check_alive', True)
-            results['detect_service'] = self.config. get('detect_service', True)
+            results['detect_service'] = self.config.get('detect_service', True)
             results['detect_os'] = self.config.get('detect_os', True)
-            results['traceroute'] = self.config. get('traceroute', False)
+            results['traceroute'] = self.config.get('traceroute', False)
+            results['traceroute_data'] = traceroute_data
+            results['latency'] = self.latency
             
         except Exception as e:
             results['status'] = 'error'

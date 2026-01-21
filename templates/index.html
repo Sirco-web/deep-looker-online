@@ -665,6 +665,124 @@
             color: #666;
             font-style: italic;
         }
+
+        /* Ping Status Styles */
+        .stat-box.ping-alive {
+            background: rgba(34, 197, 94, 0.15);
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+
+        .stat-box.ping-alive .stat-value {
+            color: #4ade80;
+        }
+
+        .stat-box.ping-dead {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .stat-box.ping-dead .stat-value {
+            color: #f87171;
+        }
+
+        /* Traceroute Styles */
+        .traceroute-section {
+            margin-top: 1.5rem;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .traceroute-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: #151515;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .traceroute-header:hover {
+            background: #1f1f1f;
+        }
+
+        .traceroute-toggle {
+            font-size: 0.85rem;
+            color: #3b82f6;
+        }
+
+        .traceroute-content {
+            padding: 1rem;
+            background: #0f0f0f;
+        }
+
+        .traceroute-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .traceroute-table th {
+            text-align: left;
+            padding: 0.75rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #151515;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .traceroute-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #1f1f1f;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .traceroute-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .hop-num {
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .hop-ip {
+            color: #fff;
+        }
+
+        .hop-hostname {
+            color: #888;
+            font-size: 0.8rem;
+        }
+
+        .hop-latency {
+            color: #4ade80;
+        }
+
+        .hop-timeout {
+            color: #666;
+        }
+
+        /* Unknown service styling */
+        .service-unknown {
+            color: #888;
+            font-style: italic;
+        }
+
+        .service-banner {
+            font-size: 0.75rem;
+            color: #666;
+            font-family: 'SF Mono', Monaco, monospace;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -816,6 +934,10 @@
             </div>
 
             <div class="stats-grid">
+                <div class="stat-box" id="pingStatus">
+                    <div class="stat-value" id="pingIcon">-</div>
+                    <div class="stat-label">Ping</div>
+                </div>
                 <div class="stat-box highlight">
                     <div class="stat-value" id="openPorts">0</div>
                     <div class="stat-label">Open Ports</div>
@@ -829,8 +951,34 @@
                     <div class="stat-label">UDP</div>
                 </div>
                 <div class="stat-box">
+                    <div class="stat-value" id="latencyValue">-</div>
+                    <div class="stat-label">Latency</div>
+                </div>
+                <div class="stat-box">
                     <div class="stat-value" id="scanDuration">-</div>
                     <div class="stat-label">Duration</div>
+                </div>
+            </div>
+
+            <!-- Traceroute Section -->
+            <div class="traceroute-section" id="tracerouteSection" style="display: none;">
+                <div class="traceroute-header" onclick="toggleTraceroute()">
+                    <span>🗺️ Traceroute</span>
+                    <span class="traceroute-toggle" id="tracerouteToggle">▼ Show</span>
+                </div>
+                <div class="traceroute-content" id="tracerouteContent" style="display: none;">
+                    <table class="traceroute-table">
+                        <thead>
+                            <tr>
+                                <th>Hop</th>
+                                <th>IP Address</th>
+                                <th>Hostname</th>
+                                <th>Latency</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tracerouteBody">
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -1095,6 +1243,29 @@
             document.getElementById('hostname').textContent = data.hostname || '-';
             document.getElementById('osInfo').textContent = data.os_guess || 'Unknown OS';
 
+            // Ping status indicator
+            var pingBox = document.getElementById('pingStatus');
+            var pingIcon = document.getElementById('pingIcon');
+            pingBox.classList.remove('ping-alive', 'ping-dead');
+            
+            if (data.is_alive === true) {
+                pingBox.classList.add('ping-alive');
+                pingIcon.textContent = '✓';
+            } else if (data.is_alive === false) {
+                pingBox.classList.add('ping-dead');
+                pingIcon.textContent = '✗';
+            } else {
+                pingIcon.textContent = '-';
+            }
+
+            // Latency display
+            var latencyEl = document.getElementById('latencyValue');
+            if (data.latency) {
+                latencyEl.textContent = data.latency;
+            } else {
+                latencyEl.textContent = '-';
+            }
+
             var ports = data.ports || [];
             // Only show open ports (not filtered or open|filtered)
             var openPorts = ports.filter(function(p) { return p.state === 'open'; });
@@ -1106,8 +1277,47 @@
             document.getElementById('udpCount').textContent = udpCount;
             document.getElementById('scanDuration').textContent = data.scan_duration || '-';
 
+            // Traceroute display
+            var tracerouteSection = document.getElementById('tracerouteSection');
+            if (data.traceroute_data && data.traceroute_data.length > 0) {
+                tracerouteSection.style.display = 'block';
+                renderTraceroute(data.traceroute_data);
+            } else {
+                tracerouteSection.style.display = 'none';
+            }
+
             scanData = openPorts;
             renderTable(openPorts);
+        }
+
+        function toggleTraceroute() {
+            var content = document.getElementById('tracerouteContent');
+            var toggle = document.getElementById('tracerouteToggle');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                toggle.textContent = '▲ Hide';
+            } else {
+                content.style.display = 'none';
+                toggle.textContent = '▼ Show';
+            }
+        }
+
+        function renderTraceroute(hops) {
+            var tbody = document.getElementById('tracerouteBody');
+            tbody.innerHTML = '';
+
+            hops.forEach(function(hop) {
+                var row = document.createElement('tr');
+                var latencyClass = hop.latency === '*' ? 'hop-timeout' : 'hop-latency';
+                var ipClass = hop.ip === '*' ? 'hop-timeout' : 'hop-ip';
+                
+                row.innerHTML = 
+                    '<td><span class="hop-num">' + hop.hop + '</span></td>' +
+                    '<td><span class="' + ipClass + '">' + hop.ip + '</span></td>' +
+                    '<td><span class="hop-hostname">' + (hop.hostname || '-') + '</span></td>' +
+                    '<td><span class="' + latencyClass + '">' + hop.latency + '</span></td>';
+                tbody.appendChild(row);
+            });
         }
 
         function renderTable(ports) {
@@ -1124,15 +1334,34 @@
                 var protocolClass = port.protocol === 'tcp' ? 'badge-tcp' : 'badge-udp';
                 var stateClass = 'badge-' + port.state.split('|')[0];
                 
+                // Handle unknown services with banner preview
+                var serviceDisplay = port.service || '-';
+                if (serviceDisplay === 'unknown' && port.banner) {
+                    var bannerPreview = port.banner.substring(0, 50);
+                    if (port.banner.length > 50) bannerPreview += '...';
+                    serviceDisplay = '<span class="service-unknown">unknown</span>' +
+                        '<div class="service-banner" title="' + escapeHtml(port.banner) + '">' + 
+                        escapeHtml(bannerPreview) + '</div>';
+                } else if (serviceDisplay === 'unknown') {
+                    serviceDisplay = '<span class="service-unknown">unknown</span>';
+                }
+                
                 row.innerHTML = 
                     '<td><span class="port-num">' + port.port + '</span></td>' +
                     '<td><span class="badge ' + protocolClass + '">' + port.protocol.toUpperCase() + '</span></td>' +
                     '<td><span class="badge ' + stateClass + '">' + port.state + '</span></td>' +
-                    '<td>' + (port.service || '-') + '</td>' +
+                    '<td>' + serviceDisplay + '</td>' +
                     '<td>' + (port.product || '-') + '</td>' +
                     '<td>' + (port.version || '-') + '</td>';
                 tbody.appendChild(row);
             });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         function resetUI() {
